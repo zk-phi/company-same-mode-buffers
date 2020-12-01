@@ -136,24 +136,21 @@ completion-style `flex'."
 (defun company-same-mode-buffers-all-completions (regex prefix)
   "Collect candidates from the current buffer by searching with
 REGEX, and other buffers by filtering the chaches with REGEX."
-  (cl-remove-duplicates
-   (delq nil
-         (mapcar (lambda (s) (and (not (string= s prefix)) s))
-                 (apply 'nconc
-                        (company-same-mode-buffers-search-current-buffer regex (point))
-                        (mapcar (lambda (cache)
-                                  (mapcar (lambda (s) (and (string-match regex s) s)) (cdr cache)))
-                                (gethash major-mode
-                                         company-same-mode-buffers-caches-by-major-mode)))))
-   :test 'string=))
+  (delq nil
+        (apply 'nconc
+               (mapcar (lambda (s) (and (not (string= s prefix)) s))
+                       (company-same-mode-buffers-search-current-buffer regex (point)))
+               (mapcar (lambda (cache)
+                         (mapcar (lambda (s) (and (string-match regex s) s)) (cdr cache)))
+                       (gethash major-mode
+                                company-same-mode-buffers-caches-by-major-mode)))))
 
 (defun company-same-mode-buffers-fuzzy-all-completions (prefix)
   (let ((case-fold-search company-same-mode-buffers-case-fold)
         (matchers company-same-mode-buffers-matchers)
         res)
     (while (and (null res) matchers)
-      (setq res (company-same-mode-buffers-all-completions (funcall (car matchers) prefix) prefix)
-            matchers (cdr matchers)))
+      (setq res (company-same-mode-buffers-all-completions (funcall (pop matchers) prefix) prefix)))
     res))
 
 (defun company-same-mode-buffers (command &optional arg &rest ignored)
@@ -162,6 +159,7 @@ REGEX, and other buffers by filtering the chaches with REGEX."
   (cl-case command
     (interactive (company-begin-backend 'company-same-mode-buffers-same-mode-buffers))
     (prefix (company-grab-symbol))
+    (duplicates t)
     (candidates (progn
                   (company-same-mode-buffers-update-cache-other-buffers)
                   (company-same-mode-buffers-fuzzy-all-completions arg)))))
