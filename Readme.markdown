@@ -42,6 +42,6 @@ them.
         company-same-mode-buffers-matcher-flex))
 ```
 
-- `company-same-mode-buffers-matcher-basic` ... `com` -> `company`
-- `company-same-mode-buffers-matcher-partial` ... `co-ba` -> `company-backends`
-- `company-same-mode-buffers-matcher-flex` ... `cbn` -> `company-backends`
+- `company-same-mode-buffers-matcher-basic` ... `compa` -> `compa*` -> `company-backends`
+- `company-same-mode-buffers-matcher-partial` ... `co-ba` -> `co*-ba*` -> `company-backends`
+- `company-same-mode-buffers-matcher-flex` ... `pbns` -> `*p*b*n*s*` -> `company-backends`
