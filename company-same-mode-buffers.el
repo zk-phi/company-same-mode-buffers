@@ -186,6 +186,7 @@ REGEX, and other buffers by filtering the chaches with REGEX."
 (defun company-same-mode-buffers-initialize ()
   (add-hook 'after-change-functions 'company-same-mode-buffers-invalidate-cache)
   (add-hook 'kill-emacs-hook 'company-same-mode-buffers-save-history)
-  (company-same-mode-buffers-load-history))
+  (company-same-mode-buffers-load-history)
+  nil)
 
 (provide 'company-same-mode-buffers)
