@@ -87,7 +87,8 @@ completion-style `flex'."
       (write-file company-same-mode-buffers-history-file))))
 
 (defun company-same-mode-buffers-load-history ()
-  (when company-same-mode-buffers-history-file
+  (when (and company-same-mode-buffers-history-file
+             (file-exists-p company-same-mode-buffers-history-file))
     (with-temp-buffer
       (insert-file-contents company-same-mode-buffers-history-file)
       (setq company-same-mode-buffers-caches-by-major-mode (read (current-buffer))))))
