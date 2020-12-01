@@ -43,7 +43,7 @@ when `company-same-mode-buffers-case-fold' is non-nil."
 
 (defun company-same-mode-buffers-matcher-basic (prefix)
   "A matcher that matches symbols start with PREFIX."
-  (concat "\\_<" (regexp-quote prefix) "\\(?:\\sw\\|\\s_\\)*"))
+  (concat "\\_<\\(" (regexp-quote prefix) "\\)\\(?:\\sw\\|\\s_\\)*"))
 
 (defun company-same-mode-buffers-matcher-partial (prefix)
   "A matcher that matches multiword symbols like completoin-style
@@ -51,13 +51,13 @@ when `company-same-mode-buffers-case-fold' is non-nil."
   (concat "\\_<"
           (mapconcat (lambda (c)
                        (cond ((= (char-syntax c) ?_) ; word-separator
-                              (concat "\\sw*" (regexp-quote (char-to-string c))))
+                              (concat "\\sw*?" (regexp-quote (char-to-string c))))
                              ((and (<= ?A c ?Z)
                                    (not company-same-mode-buffers-case-fold)
                                    company-same-mode-buffers-partial-match-subword)
-                              (concat "[a-z]*" (regexp-quote (char-to-string c))))
+                              (concat "[a-z]*?\\(" (regexp-quote (char-to-string c)) "\\)"))
                              (t
-                              (regexp-quote (char-to-string c)))))
+                              (concat "\\(" (regexp-quote (char-to-string c)) "\\)"))))
                      (string-to-list prefix)
                      "")
           "\\(?:\\s_\\|\\sw\\)*"))
@@ -65,7 +65,11 @@ when `company-same-mode-buffers-case-fold' is non-nil."
 (defun company-same-mode-buffers-matcher-flex (prefix)
   "A matcher of in-order subset of characters like
 completion-style `flex'."
-  (concat "\\_<" (mapconcat 'regexp-quote (split-string prefix "") "\\(?:\\sw\\|\\s_\\)*")))
+  (concat "\\_<\\(?:\\sw\\|\\s_\\)*?"
+          (mapconcat (lambda (s) (concat "\\(" (regexp-quote s) "\\)"))
+                     (split-string prefix "" t)
+                     "\\(?:\\sw\\|\\s_\\)*?")
+          "\\(?:\\sw\\|\\s_\\)*"))
 
 ;; ---- internals
 
@@ -153,6 +157,19 @@ REGEX, and other buffers by filtering the chaches with REGEX."
       (setq res (company-same-mode-buffers-all-completions (funcall (pop matchers) prefix) prefix)))
     res))
 
+(defun company-same-mode-buffers-make-match-data (candidate prefix)
+  (let ((case-fold-search company-same-mode-buffers-case-fold)
+        (matchers company-same-mode-buffers-matchers)
+        res)
+    (while (and (null res) matchers)
+      (when (string-match (funcall (pop matchers) prefix) candidate)
+        (let ((data (match-data t)))
+          (pop data)
+          (pop data)
+          (while data
+            (push (cons (pop data) (pop data)) res)))))
+    (nreverse res)))
+
 (defun company-same-mode-buffers (command &optional arg &rest ignored)
   "like `company-dabbrev' but flex."
   (interactive (list 'interactive))
@@ -160,6 +177,7 @@ REGEX, and other buffers by filtering the chaches with REGEX."
     (interactive (company-begin-backend 'company-same-mode-buffers-same-mode-buffers))
     (prefix (company-grab-symbol))
     (duplicates t)
+    (match (company-same-mode-buffers-make-match-data arg company-prefix))
     (candidates (progn
                   (company-same-mode-buffers-update-cache-other-buffers)
                   (company-same-mode-buffers-fuzzy-all-completions arg)))))
