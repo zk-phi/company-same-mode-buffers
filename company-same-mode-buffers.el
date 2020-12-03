@@ -2,6 +2,7 @@
 ;; flex matching and history
 
 (require 'company)
+(require 'radix-tree)
 
 (defcustom company-same-mode-buffers-case-fold nil
   "When non-nil, candidates are searched with case-fold-search."
@@ -34,11 +35,6 @@ when `company-same-mode-buffers-case-fold' is non-nil."
   completion candidates across sessions."
   :group 'company-same-mode-buffers
   :type 'string)
-
-(defcustom company-same-mode-buffers-history-size 20
-  "# of same mode buffers (per mode) saved to the history file."
-  :group 'company-same-mode-buffers
-  :type 'integer)
 
 ;; ---- matchers
 
@@ -107,30 +103,59 @@ completion-style `flex'."
        (cons (cons (car plist) (cadr plist))
              (company-same-mode-buffers-plist-to-alist (cddr plist)))))
 
+;; ---- radix-tree
+
+(defun company-same-mode-buffers-tree-insert (tree key)
+  (radix-tree-insert tree key t))
+
+(defun company-same-mode-buffers-tree-search-1 (tree query prefix)
+  (cond ((booleanp tree)                ; empty tree
+         nil)
+        ((null query)                   ; matched
+         (let (res)
+           (radix-tree-iter-mappings tree (lambda (k v) (push (concat prefix k) res)))
+           res))
+        (t
+         (nconc
+          (when (string-match (car query) (caar tree))
+            (if (match-beginning 1)
+                (let ((substr (substring (caar tree) 0 (match-end 1))))
+                  (company-same-mode-buffers-tree-search-1
+                   (radix-tree-subtree tree substr)
+                   (cdr query)
+                   (concat prefix substr)))
+              (company-same-mode-buffers-tree-search-1
+               (cdar tree) query (concat prefix (caar tree)))))
+          (company-same-mode-buffers-tree-search-1 (cdr tree) query prefix)))))
+
+(defun company-same-mode-buffers-tree-search (tree query)
+  (company-same-mode-buffers-tree-search-1
+   tree
+   (mapcar (lambda (pair) (concat "^" (car pair) "\\(?:$\\|\\(" (cdr pair) "\\)\\)")) query)
+   ""))
+
 ;; ---- internals
 
-(defvar company-same-mode-buffers-caches-by-major-mode (make-hash-table :test 'eq))
-(defvar-local company-same-mode-buffers-cache nil) ; (DIRTY . (SYMBOL ...))
+(defvar company-same-mode-buffers-cache (make-hash-table :test 'eq)) ; mode -> tree
+(defvar-local company-same-mode-buffers-cache-is-dirty t)
 
-(defun company-same-mode-buffers-update-cache (buffer)
+(defun company-same-mode-buffers-update-cache (&optional buffer)
   "Put all symbols in the buffer into
 `company-same-mode-buffers-cache'."
-  (with-current-buffer buffer
-    (unless company-same-mode-buffers-cache
-      (setq company-same-mode-buffers-cache (cons t nil))
-      (push company-same-mode-buffers-cache
-            (gethash major-mode company-same-mode-buffers-caches-by-major-mode)))
-    (when (car company-same-mode-buffers-cache)
-      (setcdr company-same-mode-buffers-cache
-              (company-same-mode-buffers-search-current-buffer
-               (concat "\\(:?+\\sw\\|\\s_\\)\\{"
-                       (number-to-string company-same-mode-buffers-minimum-word-length)
-                       ",\\}")))
-      (setcar company-same-mode-buffers-cache nil))))
+  (with-current-buffer (or buffer (current-buffer))
+    (when company-same-mode-buffers-cache-is-dirty
+      (let ((tree (gethash major-mode company-same-mode-buffers-cache))
+            (symbols (company-same-mode-buffers-search-current-buffer
+                      (concat "\\(:?+\\sw\\|\\s_\\)\\{"
+                              (number-to-string company-same-mode-buffers-minimum-word-length)
+                              ",\\}"))))
+        (dolist (s symbols)
+          (setq tree (company-same-mode-buffers-tree-insert tree s)))
+        (puthash major-mode tree company-same-mode-buffers-cache)
+        (setq company-same-mode-buffers-cache-is-dirty nil)))))
 
 (defun company-same-mode-buffers-invalidate-cache (&rest _)
-  (when (and company-same-mode-buffers-cache (not (car company-same-mode-buffers-cache)))
-    (setcar company-same-mode-buffers-cache t)))
+  (setq company-same-mode-buffers-cache-is-dirty t))
 
 (defun company-same-mode-buffers-update-cache-other-buffers ()
   "Update cache for all buffers except for the current buffer."
@@ -138,26 +163,24 @@ completion-style `flex'."
     (unless (eq buf (current-buffer))
       (company-same-mode-buffers-update-cache buf))))
 
-(defun company-same-mode-buffers-all-completions (regex prefix)
+(defun company-same-mode-buffers-all-completions (query prefix)
   "Collect candidates from the current buffer by searching with
 REGEX, and other buffers by filtering the chaches with REGEX."
-  (delq nil
-        (apply 'nconc
+  (nconc (delq nil
                (mapcar (lambda (s) (and (not (string= s prefix)) s))
-                       (company-same-mode-buffers-search-current-buffer regex (point)))
-               (mapcar (lambda (cache)
-                         (mapcar (lambda (s) (and (string-match regex s) s)) (cdr cache)))
-                       (gethash major-mode
-                                company-same-mode-buffers-caches-by-major-mode)))))
+                       (company-same-mode-buffers-search-current-buffer
+                        (company-same-mode-buffers-query-to-regex query)
+                        (point))))
+         (company-same-mode-buffers-tree-search
+          (gethash major-mode company-same-mode-buffers-cache)
+          query)))
 
 (defun company-same-mode-buffers-fuzzy-all-completions (prefix)
   (let ((case-fold-search company-same-mode-buffers-case-fold)
         (matchers company-same-mode-buffers-matchers)
         res)
     (while (and (null res) matchers)
-      (setq res (company-same-mode-buffers-all-completions
-                 (company-same-mode-buffers-query-to-regex (funcall (pop matchers) prefix))
-                 prefix)))
+      (setq res (company-same-mode-buffers-all-completions (funcall (pop matchers) prefix) prefix)))
     res))
 
 (defun company-same-mode-buffers-make-match-data (candidate prefix)
@@ -191,14 +214,8 @@ REGEX, and other buffers by filtering the chaches with REGEX."
   (when company-same-mode-buffers-history-file
     (company-same-mode-buffers-update-cache-other-buffers)
     (company-same-mode-buffers-update-cache (current-buffer))
-    ;; drop old entries
-    (mapc (lambda (history)
-            (let ((pair (nthcdr (1- company-same-mode-buffers-history-size) history)))
-              (when pair
-                (setcdr pair nil))))
-          (hash-table-values company-same-mode-buffers-caches-by-major-mode))
     (with-temp-buffer
-      (prin1 company-same-mode-buffers-caches-by-major-mode (current-buffer))
+      (prin1 company-same-mode-buffers-cache (current-buffer))
       (write-file company-same-mode-buffers-history-file))))
 
 (defun company-same-mode-buffers-load-history ()
@@ -206,10 +223,13 @@ REGEX, and other buffers by filtering the chaches with REGEX."
              (file-exists-p company-same-mode-buffers-history-file))
     (with-temp-buffer
       (insert-file-contents company-same-mode-buffers-history-file)
-      (setq company-same-mode-buffers-caches-by-major-mode (read (current-buffer))))))
+      (let ((hash (read (current-buffer))))
+        (unless (booleanp (caaar (hash-table-values hash))) ; old format
+          (setq company-same-mode-buffers-cache hash))))))
 
 (defun company-same-mode-buffers-initialize ()
   (add-hook 'after-change-functions 'company-same-mode-buffers-invalidate-cache)
+  (add-hook 'kill-buffer-hook 'company-same-mode-buffers-update-cache)
   (add-hook 'kill-emacs-hook 'company-same-mode-buffers-save-history)
   (company-same-mode-buffers-load-history)
   nil)
