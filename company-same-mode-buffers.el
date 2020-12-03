@@ -37,6 +37,12 @@ when `company-same-mode-buffers-case-fold' is non-nil."
   :group 'company-same-mode-buffers
   :type 'string)
 
+(defcustom company-same-mode-buffers-history-store-limit (* 7 24 60 60)
+  "How long (in seconds) candidates should be stored in the
+  history file."
+  :group 'company-same-mode-buffers
+  :type 'number)
+
 ;; ---- matchers
 
 (defun company-same-mode-buffers-query-construct-any-followed-by (str)
@@ -119,11 +125,11 @@ before the cursor is skipped."
 
 ;; ---- radix-tree
 
-(defun company-same-mode-buffers-tree-insert (tree key)
-  (radix-tree-insert tree key t))
+(defun company-same-mode-buffers-tree-insert (tree key float-time)
+  (radix-tree-insert tree key float-time))
 
 (defun company-same-mode-buffers-tree-search-1 (tree query prefix)
-  (cond ((booleanp tree)                ; empty tree
+  (cond ((not (consp tree))             ; empty tree
          nil)
         ((null query)                   ; matched
          (let (res)
@@ -162,9 +168,10 @@ before the cursor is skipped."
             (symbols (company-same-mode-buffers-search-current-buffer
                       (concat "\\(:?+\\sw\\|\\s_\\)\\{"
                               (number-to-string company-same-mode-buffers-minimum-word-length)
-                              ",\\}"))))
+                              ",\\}")))
+            (time (float-time)))
         (dolist (s symbols)
-          (setq tree (company-same-mode-buffers-tree-insert tree s)))
+          (setq tree (company-same-mode-buffers-tree-insert tree s time)))
         (puthash major-mode tree company-same-mode-buffers-cache)
         (setq company-same-mode-buffers-cache-is-dirty nil)))))
 
@@ -222,6 +229,24 @@ REGEX, and other buffers by filtering the chaches with REGEX."
 
 ;; ---- save and load
 
+(defun company-same-mode-buffers-history-remove-old-entries ()
+  "Remove old entries from the history."
+  (let ((newhash (make-hash-table :test 'eq))
+        (limit (- (float-time) company-same-mode-buffers-history-store-limit))
+        (deleted 0))
+    (dolist (mode (hash-table-keys company-same-mode-buffers-cache))
+      (let (tree)
+        (radix-tree-iter-mappings
+         (gethash mode company-same-mode-buffers-cache)
+         (lambda (k v)
+           (if (<= limit v)
+               (setq tree (radix-tree-insert tree k v))
+             (setq deleted (1+ deleted)))))
+        (when tree
+          (puthash mode tree newhash))))
+    (setq company-same-mode-buffers-cache newhash)
+    (message "company-same-mode-buffers: deleted %d items" deleted)))
+
 (defun company-same-mode-buffers-save-history ()
   (when company-same-mode-buffers-history-file
     (company-same-mode-buffers-update-cache-other-buffers)
@@ -243,6 +268,7 @@ REGEX, and other buffers by filtering the chaches with REGEX."
   (add-hook 'after-change-functions 'company-same-mode-buffers-invalidate-cache)
   (add-hook 'kill-buffer-hook 'company-same-mode-buffers-update-cache)
   (add-hook 'kill-emacs-hook 'company-same-mode-buffers-save-history)
+  (run-with-idle-timer 10 nil 'company-same-mode-buffers-history-remove-old-entries)
   (company-same-mode-buffers-load-history)
   nil)
 
