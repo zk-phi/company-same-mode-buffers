@@ -129,7 +129,7 @@ completion-style `flex'."
       (goto-char (or cursor (point-min)))
       (while (search-forward-regexp regex nil t)
         (push (match-string-no-properties 0) lst)))
-    (nreverse lst)))
+    lst))
 
 (defun company-same-mode-buffers-update-cache-other-buffers ()
   "Update cache for all buffers except for the current buffer."
