@@ -19,7 +19,8 @@ when `company-same-mode-buffers-case-fold' is non-nil."
     company-same-mode-buffers-matcher-partial
     company-same-mode-buffers-matcher-flex)
   "List of company-same-mode-buffers matchers. Works like
-  `completion-styles'."
+  `completion-styles'. Internally a matcher is a function which
+  builds query (list of query constructs) from prefix string."
   :group 'company-same-mode-buffers
   :type '(list function))
 
@@ -41,35 +42,42 @@ when `company-same-mode-buffers-case-fold' is non-nil."
 
 ;; ---- matchers
 
+(defun company-same-mode-buffers-query-construct-any-followed-by (str)
+  (cons "\\(?:\\sw\\|\\s_\\)*?" (regexp-quote str)))
+
+(defun company-same-mode-buffers-query-construct-any-word-followed-by (str)
+  (cons "\\sw*?" (regexp-quote str)))
+
+(defun company-same-mode-buffers-query-construct-any-lower-followed-by (str)
+  (cons "[a-z]*?" (regexp-quote str)))
+
+(defun company-same-mode-buffers-query-construct-exact (str)
+  (cons "" (regexp-quote str)))
+
 (defun company-same-mode-buffers-matcher-basic (prefix)
   "A matcher that matches symbols start with PREFIX."
-  (concat "\\_<\\(" (regexp-quote prefix) "\\)\\(?:\\sw\\|\\s_\\)*"))
+  (mapcar (lambda (s) (company-same-mode-buffers-query-construct-exact s))
+          (split-string prefix "" t)))
 
 (defun company-same-mode-buffers-matcher-partial (prefix)
   "A matcher that matches multiword symbols like completoin-style
 `partial-completion'."
-  (concat "\\_<"
-          (mapconcat (lambda (c)
-                       (cond ((= (char-syntax c) ?_) ; word-separator
-                              (concat "\\sw*?" (regexp-quote (char-to-string c))))
-                             ((and (<= ?A c ?Z)
-                                   (not company-same-mode-buffers-case-fold)
-                                   company-same-mode-buffers-partial-match-subword)
-                              (concat "[a-z]*?\\(" (regexp-quote (char-to-string c)) "\\)"))
-                             (t
-                              (concat "\\(" (regexp-quote (char-to-string c)) "\\)"))))
-                     (string-to-list prefix)
-                     "")
-          "\\(?:\\s_\\|\\sw\\)*"))
+  (mapcar (lambda (s)
+            (cond ((= (char-syntax (aref s 0)) ?_) ; word-separator
+                   (company-same-mode-buffers-query-construct-any-word-followed-by s))
+                  ((and (<= ?A (aref s 0) ?Z)
+                        (not company-same-mode-buffers-case-fold)
+                        company-same-mode-buffers-partial-match-subword)
+                   (company-same-mode-buffers-query-construct-any-lower-followed-by s))
+                  (t
+                   (company-same-mode-buffers-query-construct-exact s))))
+          (split-string prefix "" t)))
 
 (defun company-same-mode-buffers-matcher-flex (prefix)
   "A matcher of in-order subset of characters like
 completion-style `flex'."
-  (concat "\\_<\\(?:\\sw\\|\\s_\\)*?"
-          (mapconcat (lambda (s) (concat "\\(" (regexp-quote s) "\\)"))
-                     (split-string prefix "" t)
-                     "\\(?:\\sw\\|\\s_\\)*?")
-          "\\(?:\\sw\\|\\s_\\)*"))
+  (mapcar (lambda (s) (company-same-mode-buffers-query-construct-any-followed-by s))
+          (split-string prefix "" t)))
 
 ;; ---- internals
 
@@ -149,6 +157,12 @@ REGEX, and other buffers by filtering the chaches with REGEX."
                        (gethash major-mode
                                 company-same-mode-buffers-caches-by-major-mode)))))
 
+(defun company-same-mode-buffers-query-to-regex (lst)
+  "Make a regex from a query (list of `query-construct-*' s)."
+  (concat "\\_<"
+          (mapconcat (lambda (pair) (concat (car pair) "\\(" (cdr pair) "\\)")) lst "")
+          "\\(?:\\s_\\|\\sw\\)*"))
+
 (defun company-same-mode-buffers-plist-to-alist (plist)
   "Convert plist to alist."
   (and plist
@@ -160,7 +174,9 @@ REGEX, and other buffers by filtering the chaches with REGEX."
         (matchers company-same-mode-buffers-matchers)
         res)
     (while (and (null res) matchers)
-      (setq res (company-same-mode-buffers-all-completions (funcall (pop matchers) prefix) prefix)))
+      (setq res (company-same-mode-buffers-all-completions
+                 (company-same-mode-buffers-query-to-regex (funcall (pop matchers) prefix))
+                 prefix)))
     res))
 
 (defun company-same-mode-buffers-make-match-data (candidate prefix)
@@ -168,7 +184,9 @@ REGEX, and other buffers by filtering the chaches with REGEX."
         (matchers company-same-mode-buffers-matchers)
         res)
     (while (and (null res) matchers)
-      (when (string-match (funcall (pop matchers) prefix) candidate)
+      (when (string-match
+             (company-same-mode-buffers-query-to-regex (funcall (pop matchers) prefix))
+             candidate)
         (setq res (company-same-mode-buffers-plist-to-alist (cddr (match-data t))))))
     res))
 
