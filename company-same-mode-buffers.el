@@ -79,31 +79,38 @@ completion-style `flex'."
   (mapcar (lambda (s) (company-same-mode-buffers-query-construct-any-followed-by s))
           (split-string prefix "" t)))
 
+(defun company-same-mode-buffers-query-to-regex (lst)
+  "Make a regex from a query (list of `query-construct-*' s)."
+  (concat "\\_<"
+          (mapconcat (lambda (pair) (concat (car pair) "\\(" (cdr pair) "\\)")) lst "")
+          "\\(?:\\s_\\|\\sw\\)*"))
+
+;; ---- utils
+
+(defun company-same-mode-buffers-search-current-buffer (regex &optional cursor)
+  "Search REGEX in the buffer and return all matching results."
+  (let (lst)
+    (when cursor
+      (save-excursion
+        (goto-char cursor)
+        (while (search-backward-regexp regex nil t)
+          (push (match-string-no-properties 0) lst))))
+    (save-excursion
+      (goto-char (or cursor (point-min)))
+      (while (search-forward-regexp regex nil t)
+        (push (match-string-no-properties 0) lst)))
+    lst))
+
+(defun company-same-mode-buffers-plist-to-alist (plist)
+  "Convert plist to alist."
+  (and plist
+       (cons (cons (car plist) (cadr plist))
+             (company-same-mode-buffers-plist-to-alist (cddr plist)))))
+
 ;; ---- internals
 
 (defvar company-same-mode-buffers-caches-by-major-mode (make-hash-table :test 'eq))
 (defvar-local company-same-mode-buffers-cache nil) ; (DIRTY . (SYMBOL ...))
-
-(defun company-same-mode-buffers-save-history ()
-  (when company-same-mode-buffers-history-file
-    (company-same-mode-buffers-update-cache-other-buffers)
-    (company-same-mode-buffers-update-cache (current-buffer))
-    ;; drop old entries
-    (mapc (lambda (history)
-            (let ((pair (nthcdr (1- company-same-mode-buffers-history-size) history)))
-              (when pair
-                (setcdr pair nil))))
-          (hash-table-values company-same-mode-buffers-caches-by-major-mode))
-    (with-temp-buffer
-      (prin1 company-same-mode-buffers-caches-by-major-mode (current-buffer))
-      (write-file company-same-mode-buffers-history-file))))
-
-(defun company-same-mode-buffers-load-history ()
-  (when (and company-same-mode-buffers-history-file
-             (file-exists-p company-same-mode-buffers-history-file))
-    (with-temp-buffer
-      (insert-file-contents company-same-mode-buffers-history-file)
-      (setq company-same-mode-buffers-caches-by-major-mode (read (current-buffer))))))
 
 (defun company-same-mode-buffers-update-cache (buffer)
   "Put all symbols in the buffer into
@@ -125,20 +132,6 @@ completion-style `flex'."
   (when (and company-same-mode-buffers-cache (not (car company-same-mode-buffers-cache)))
     (setcar company-same-mode-buffers-cache t)))
 
-(defun company-same-mode-buffers-search-current-buffer (regex &optional cursor)
-  "Search REGEX in the buffer and return all matching results."
-  (let (lst)
-    (when cursor
-      (save-excursion
-        (goto-char cursor)
-        (while (search-backward-regexp regex nil t)
-          (push (match-string-no-properties 0) lst))))
-    (save-excursion
-      (goto-char (or cursor (point-min)))
-      (while (search-forward-regexp regex nil t)
-        (push (match-string-no-properties 0) lst)))
-    lst))
-
 (defun company-same-mode-buffers-update-cache-other-buffers ()
   "Update cache for all buffers except for the current buffer."
   (dolist (buf (buffer-list))
@@ -156,18 +149,6 @@ REGEX, and other buffers by filtering the chaches with REGEX."
                          (mapcar (lambda (s) (and (string-match regex s) s)) (cdr cache)))
                        (gethash major-mode
                                 company-same-mode-buffers-caches-by-major-mode)))))
-
-(defun company-same-mode-buffers-query-to-regex (lst)
-  "Make a regex from a query (list of `query-construct-*' s)."
-  (concat "\\_<"
-          (mapconcat (lambda (pair) (concat (car pair) "\\(" (cdr pair) "\\)")) lst "")
-          "\\(?:\\s_\\|\\sw\\)*"))
-
-(defun company-same-mode-buffers-plist-to-alist (plist)
-  "Convert plist to alist."
-  (and plist
-       (cons (cons (car plist) (cadr plist))
-             (company-same-mode-buffers-plist-to-alist (cddr plist)))))
 
 (defun company-same-mode-buffers-fuzzy-all-completions (prefix)
   (let ((case-fold-search company-same-mode-buffers-case-fold)
@@ -203,6 +184,29 @@ REGEX, and other buffers by filtering the chaches with REGEX."
     (candidates (progn
                   (company-same-mode-buffers-update-cache-other-buffers)
                   (company-same-mode-buffers-fuzzy-all-completions arg)))))
+
+;; ---- save and load
+
+(defun company-same-mode-buffers-save-history ()
+  (when company-same-mode-buffers-history-file
+    (company-same-mode-buffers-update-cache-other-buffers)
+    (company-same-mode-buffers-update-cache (current-buffer))
+    ;; drop old entries
+    (mapc (lambda (history)
+            (let ((pair (nthcdr (1- company-same-mode-buffers-history-size) history)))
+              (when pair
+                (setcdr pair nil))))
+          (hash-table-values company-same-mode-buffers-caches-by-major-mode))
+    (with-temp-buffer
+      (prin1 company-same-mode-buffers-caches-by-major-mode (current-buffer))
+      (write-file company-same-mode-buffers-history-file))))
+
+(defun company-same-mode-buffers-load-history ()
+  (when (and company-same-mode-buffers-history-file
+             (file-exists-p company-same-mode-buffers-history-file))
+    (with-temp-buffer
+      (insert-file-contents company-same-mode-buffers-history-file)
+      (setq company-same-mode-buffers-caches-by-major-mode (read (current-buffer))))))
 
 (defun company-same-mode-buffers-initialize ()
   (add-hook 'after-change-functions 'company-same-mode-buffers-invalidate-cache)
