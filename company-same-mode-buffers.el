@@ -84,11 +84,16 @@ completion-style `flex'."
 ;; ---- utils
 
 (defun company-same-mode-buffers-search-current-buffer (regex &optional cursor)
-  "Search REGEX in the buffer and return all matching results."
+  "Search REGEX in the buffer and return all matching
+results. When CURSOR is specified, region before cursor and after
+cursor are searched separately. In addition, the symbol just
+before the cursor is skipped."
   (let (lst)
     (when cursor
       (save-excursion
         (goto-char cursor)
+        (when (looking-back "\\_>" (1- (point)))
+          (search-backward-regexp "\\_<" nil t))
         (while (search-backward-regexp regex nil t)
           (push (match-string-no-properties 0) lst))))
     (save-excursion
@@ -166,11 +171,9 @@ completion-style `flex'."
 (defun company-same-mode-buffers-all-completions (query prefix)
   "Collect candidates from the current buffer by searching with
 REGEX, and other buffers by filtering the chaches with REGEX."
-  (nconc (delq nil
-               (mapcar (lambda (s) (and (not (string= s prefix)) s))
-                       (company-same-mode-buffers-search-current-buffer
-                        (company-same-mode-buffers-query-to-regex query)
-                        (point))))
+  (nconc (company-same-mode-buffers-search-current-buffer
+          (company-same-mode-buffers-query-to-regex query)
+          (point))
          (company-same-mode-buffers-tree-search
           (gethash major-mode company-same-mode-buffers-cache)
           query)))
