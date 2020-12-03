@@ -230,46 +230,55 @@ REGEX, and other buffers by filtering the chaches with REGEX."
 
 ;; ---- save and load
 
-(defun company-same-mode-buffers-history-remove-old-entries ()
-  "Remove old entries from the history."
-  (let ((newhash (make-hash-table :test 'eq))
-        (limit (- (float-time) company-same-mode-buffers-history-store-limit))
-        (deleted 0))
-    (dolist (mode (hash-table-keys company-same-mode-buffers-cache))
-      (let (tree)
+(defun company-same-mode-buffers-history-to-saved-format (hash)
+  (let ((limit (- (float-time) company-same-mode-buffers-history-store-limit))
+        (data nil))
+    (dolist (mode (hash-table-keys hash))
+      (let ((hash-by-time (make-hash-table :test 'eql))
+            lst)
         (radix-tree-iter-mappings
-         (gethash mode company-same-mode-buffers-cache)
-         (lambda (k v)
-           (if (<= limit v)
-               (setq tree (radix-tree-insert tree k v))
-             (setq deleted (1+ deleted)))))
-        (when tree
-          (puthash mode tree newhash))))
-    (setq company-same-mode-buffers-cache newhash)
-    (message "company-same-mode-buffers: deleted %d items" deleted)))
+         (gethash mode hash)
+         (lambda (symb time)
+           (when (<= limit time)
+             (push symb (gethash time hash-by-time)))))
+        (maphash (lambda (time symbs)
+                   (push (cons time symbs) lst))
+                 hash-by-time)
+        (when lst
+          (push (cons mode lst) data))))
+    data))
+
+(defun company-same-mode-buffers-history-from-saved-format (data)
+  (let ((hash (make-hash-table :test 'eq)))
+    (dolist (mode-row data)
+      (let (tree)
+        (dolist (time-row (cdr mode-row))
+          (dolist (s (cdr time-row))
+            (setq tree (company-same-mode-buffers-tree-insert tree s (car time-row)))))
+        (puthash (car mode-row) tree hash)))
+    hash))
 
 (defun company-same-mode-buffers-save-history ()
   (when company-same-mode-buffers-history-file
     (company-same-mode-buffers-update-cache-other-buffers)
     (company-same-mode-buffers-update-cache (current-buffer))
-    (with-temp-buffer
-      (prin1 company-same-mode-buffers-cache (current-buffer))
-      (write-file company-same-mode-buffers-history-file))))
+    (let ((data (company-same-mode-buffers-history-to-saved-format company-same-mode-buffers-cache)))
+      (with-temp-buffer
+        (prin1 data (current-buffer))
+        (write-file company-same-mode-buffers-history-file)))))
 
 (defun company-same-mode-buffers-load-history ()
   (when (and company-same-mode-buffers-history-file
              (file-exists-p company-same-mode-buffers-history-file))
     (with-temp-buffer
       (insert-file-contents company-same-mode-buffers-history-file)
-      (let ((hash (read (current-buffer))))
-        (unless (booleanp (caaar (hash-table-values hash))) ; old format
-          (setq company-same-mode-buffers-cache hash))))))
+      (let ((data (company-same-mode-buffers-history-from-saved-format (read (current-buffer)))))
+        (setq company-same-mode-buffers-cache data)))))
 
 (defun company-same-mode-buffers-initialize ()
   (add-hook 'after-change-functions 'company-same-mode-buffers-invalidate-cache)
   (add-hook 'kill-buffer-hook 'company-same-mode-buffers-update-cache)
   (add-hook 'kill-emacs-hook 'company-same-mode-buffers-save-history)
-  (run-with-idle-timer 10 nil 'company-same-mode-buffers-history-remove-old-entries)
   (company-same-mode-buffers-load-history)
   nil)
 
