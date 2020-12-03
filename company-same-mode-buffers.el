@@ -163,7 +163,8 @@ before the cursor is skipped."
   "Put all symbols in the buffer into
 `company-same-mode-buffers-cache'."
   (with-current-buffer (or buffer (current-buffer))
-    (when company-same-mode-buffers-cache-is-dirty
+    (when (and company-same-mode-buffers-cache-is-dirty
+               (derived-mode-p 'prog-mode))
       (let ((tree (gethash major-mode company-same-mode-buffers-cache))
             (symbols (company-same-mode-buffers-search-current-buffer
                       (concat "\\(:?+\\sw\\|\\s_\\)\\{"
