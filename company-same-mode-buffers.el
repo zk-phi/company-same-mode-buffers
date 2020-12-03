@@ -125,8 +125,10 @@ before the cursor is skipped."
 
 ;; ---- radix-tree
 
-(defun company-same-mode-buffers-tree-insert (tree key float-time)
-  (radix-tree-insert tree key float-time))
+(defconst company-same-mode-buffers-session-start-time (float-time))
+
+(defun company-same-mode-buffers-tree-insert (tree key &optional float-time)
+  (radix-tree-insert tree key (or float-time company-same-mode-buffers-session-start-time)))
 
 (defun company-same-mode-buffers-tree-search-1 (tree query prefix)
   (cond ((not (consp tree))             ; empty tree
@@ -170,10 +172,9 @@ before the cursor is skipped."
             (symbols (company-same-mode-buffers-search-current-buffer
                       (concat "\\(:?+\\sw\\|\\s_\\)\\{"
                               (number-to-string company-same-mode-buffers-minimum-word-length)
-                              ",\\}")))
-            (time (float-time)))
+                              ",\\}"))))
         (dolist (s symbols)
-          (setq tree (company-same-mode-buffers-tree-insert tree s time)))
+          (setq tree (company-same-mode-buffers-tree-insert tree s)))
         (puthash major-mode tree company-same-mode-buffers-cache)
         (setq company-same-mode-buffers-cache-is-dirty nil)))))
 
