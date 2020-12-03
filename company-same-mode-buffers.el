@@ -177,7 +177,8 @@ REGEX, and other buffers by filtering the chaches with REGEX."
   (interactive (list 'interactive))
   (cl-case command
     (interactive (company-begin-backend 'company-same-mode-buffers-same-mode-buffers))
-    (prefix (company-grab-symbol))
+    (prefix (and (derived-mode-p 'prog-mode)
+                 (company-grab-symbol)))
     (no-cache t)
     (duplicates t)
     (match (company-same-mode-buffers-make-match-data arg company-prefix))
