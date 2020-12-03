@@ -156,7 +156,8 @@ before the cursor is skipped."
 
 ;; ---- internals
 
-(defvar company-same-mode-buffers-cache (make-hash-table :test 'eq)) ; mode -> tree
+;; hash[mode -> tree[symb -> time]]
+(defvar company-same-mode-buffers-cache (make-hash-table :test 'eq))
 (defvar-local company-same-mode-buffers-cache-is-dirty t)
 
 (defun company-same-mode-buffers-update-cache (&optional buffer)
@@ -231,30 +232,31 @@ REGEX, and other buffers by filtering the chaches with REGEX."
 ;; ---- save and load
 
 (defun company-same-mode-buffers-history-to-saved-format (hash)
+  ;; alist[mode -> alist[time -> list[symb]]]
   (let ((limit (- (float-time) company-same-mode-buffers-history-store-limit))
-        (data nil))
+        (mode-list nil))
     (dolist (mode (hash-table-keys hash))
-      (let ((hash-by-time (make-hash-table :test 'eql))
-            lst)
+      (let ((hash-by-time (make-hash-table :test 'eql)))
         (radix-tree-iter-mappings
          (gethash mode hash)
          (lambda (symb time)
            (when (<= limit time)
              (push symb (gethash time hash-by-time)))))
-        (maphash (lambda (time symbs)
-                   (push (cons time symbs) lst))
-                 hash-by-time)
-        (when lst
-          (push (cons mode lst) data))))
-    data))
+        (let (time-list)
+          (maphash (lambda (time symbs)
+                     (push (cons time symbs) time-list))
+                   hash-by-time)
+          (when time-list
+            (push (cons mode time-list) mode-list)))))
+    mode-list))
 
 (defun company-same-mode-buffers-history-from-saved-format (data)
   (let ((hash (make-hash-table :test 'eq)))
     (dolist (mode-row data)
       (let (tree)
         (dolist (time-row (cdr mode-row))
-          (dolist (s (cdr time-row))
-            (setq tree (company-same-mode-buffers-tree-insert tree s (car time-row)))))
+          (dolist (symb (cdr time-row))
+            (setq tree (company-same-mode-buffers-tree-insert tree symb (car time-row)))))
         (puthash (car mode-row) tree hash)))
     hash))
 
