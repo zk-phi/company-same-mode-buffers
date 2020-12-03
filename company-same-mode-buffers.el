@@ -233,7 +233,7 @@ REGEX, and other buffers by filtering the chaches with REGEX."
 
 ;; ---- save and load
 
-(defun company-same-mode-buffers-history-to-saved-format (hash)
+(defun company-same-mode-buffers-history-to-saved-format-v1 (hash)
   ;; alist[mode -> alist[time -> list[symb]]]
   (let ((limit (- (float-time) company-same-mode-buffers-history-store-limit))
         (mode-list nil))
@@ -252,7 +252,7 @@ REGEX, and other buffers by filtering the chaches with REGEX."
             (push (cons mode time-list) mode-list)))))
     mode-list))
 
-(defun company-same-mode-buffers-history-from-saved-format (data)
+(defun company-same-mode-buffers-history-from-saved-format-v1 (data)
   (let ((hash (make-hash-table :test 'eq)))
     (dolist (mode-row data)
       (let (tree)
@@ -266,9 +266,10 @@ REGEX, and other buffers by filtering the chaches with REGEX."
   (when company-same-mode-buffers-history-file
     (company-same-mode-buffers-update-cache-other-buffers)
     (company-same-mode-buffers-update-cache (current-buffer))
-    (let ((data (company-same-mode-buffers-history-to-saved-format company-same-mode-buffers-cache)))
+    (let ((data
+           (company-same-mode-buffers-history-to-saved-format-v1 company-same-mode-buffers-cache)))
       (with-temp-buffer
-        (prin1 data (current-buffer))
+        (prin1 (cons 1 data) (current-buffer))
         (write-file company-same-mode-buffers-history-file)))))
 
 (defun company-same-mode-buffers-load-history ()
@@ -276,8 +277,11 @@ REGEX, and other buffers by filtering the chaches with REGEX."
              (file-exists-p company-same-mode-buffers-history-file))
     (with-temp-buffer
       (insert-file-contents company-same-mode-buffers-history-file)
-      (let ((data (company-same-mode-buffers-history-from-saved-format (read (current-buffer)))))
-        (setq company-same-mode-buffers-cache data)))))
+      (let ((data (read (current-buffer))))
+        (cl-case (car data)
+          (1 (setq company-same-mode-buffers-cache
+                   (company-same-mode-buffers-history-from-saved-format-v1 (cdr data))))
+          (t (error "unknown history file version")))))))
 
 (defun company-same-mode-buffers-initialize ()
   (add-hook 'after-change-functions 'company-same-mode-buffers-invalidate-cache)
