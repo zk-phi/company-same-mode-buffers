@@ -18,6 +18,7 @@ when `company-same-mode-buffers-case-fold' is non-nil."
 (defcustom company-same-mode-buffers-matchers
   '(company-same-mode-buffers-matcher-basic
     company-same-mode-buffers-matcher-partial
+    company-same-mode-buffers-matcher-exact-first-letter-flex-rest
     company-same-mode-buffers-matcher-flex)
   "List of company-same-mode-buffers matchers. Works like
   `completion-styles'. Internally a matcher is a function which
@@ -68,6 +69,14 @@ when `company-same-mode-buffers-case-fold' is non-nil."
                   (t
                    (company-same-mode-buffers-query-construct-exact s))))
           (split-string prefix "" t)))
+
+(defun company-same-mode-buffers-matcher-exact-first-letter-flex-rest (prefix)
+  "Like `company-same-mode-buffers-matcher-flex' but requires the
+first letter to be matched."
+  (let ((lst (split-string prefix "" t)))
+    (cons (company-same-mode-buffers-query-construct-exact (car lst))
+          (mapcar (lambda (s) (company-same-mode-buffers-query-construct-any-followed-by s))
+                  (cdr lst)))))
 
 (defun company-same-mode-buffers-matcher-flex (prefix)
   "A matcher of in-order subset of characters like
