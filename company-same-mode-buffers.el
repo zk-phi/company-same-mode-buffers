@@ -1,6 +1,7 @@
 ;; company backend to complete symbols from same mode buffers with
 ;; flex matching and history
 
+(require 'cl-lib)
 (require 'company)
 (require 'radix-tree)
 
