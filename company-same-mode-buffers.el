@@ -149,6 +149,12 @@ REGEX, and other buffers by filtering the chaches with REGEX."
                        (gethash major-mode
                                 company-same-mode-buffers-caches-by-major-mode)))))
 
+(defun company-same-mode-buffers-plist-to-alist (plist)
+  "Convert plist to alist."
+  (and plist
+       (cons (cons (car plist) (cadr plist))
+             (company-same-mode-buffers-plist-to-alist (cddr plist)))))
+
 (defun company-same-mode-buffers-fuzzy-all-completions (prefix)
   (let ((case-fold-search company-same-mode-buffers-case-fold)
         (matchers company-same-mode-buffers-matchers)
@@ -163,12 +169,8 @@ REGEX, and other buffers by filtering the chaches with REGEX."
         res)
     (while (and (null res) matchers)
       (when (string-match (funcall (pop matchers) prefix) candidate)
-        (let ((data (match-data t)))
-          (pop data)
-          (pop data)
-          (while data
-            (push (cons (pop data) (pop data)) res)))))
-    (nreverse res)))
+        (setq res (company-same-mode-buffers-plist-to-alist (cddr (match-data t))))))
+    res))
 
 (defun company-same-mode-buffers (command &optional arg &rest ignored)
   "like `company-dabbrev' but flex."
