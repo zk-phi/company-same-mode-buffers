@@ -271,7 +271,8 @@ REGEX, and other buffers by filtering the chaches with REGEX."
     (company-same-mode-buffers-update-cache-other-buffers)
     (company-same-mode-buffers-update-cache (current-buffer))
     (let ((data
-           (company-same-mode-buffers-history-to-saved-format-v1 company-same-mode-buffers-cache)))
+           (company-same-mode-buffers-history-to-saved-format-v1 company-same-mode-buffers-cache))
+          (enable-local-variables nil))
       (with-temp-buffer
         (prin1 (cons 1 data) (current-buffer))
         (write-file company-same-mode-buffers-history-file)))))
