@@ -2,6 +2,7 @@
 ;; flex matching and history
 
 (require 'cl-lib)
+(require 'subr-x)
 (require 'company)
 (require 'radix-tree)
 
