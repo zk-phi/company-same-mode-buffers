@@ -33,6 +33,12 @@ when `company-same-mode-buffers-case-fold' is non-nil."
   :group 'company-same-mode-buffers
   :type 'integer)
 
+(defcustom company-same-mode-buffers-maximum-word-length 80
+  "Maximum length of words to save. This may be useful to avoid
+  long meaningless words (like base64 string) to be saved."
+  :group 'company-same-mode-buffers
+  :type 'integer)
+
 (defcustom company-same-mode-buffers-history-file nil
   "When non-nil, save history to a file in order to share
   completion candidates across sessions."
@@ -177,7 +183,9 @@ the TREE, then just update timestamp."
             (symbols (company-same-mode-buffers-search-current-buffer
                       (concat "\\(:?+\\sw\\|\\s_\\)\\{"
                               (number-to-string company-same-mode-buffers-minimum-word-length)
-                              ",\\}"))))
+                              ","
+                              (number-to-string company-same-mode-buffers-maximum-word-length)
+                              "\\}"))))
         (dolist (s symbols)
           (setq tree (company-same-mode-buffers-tree-insert tree s)))
         (puthash major-mode tree company-same-mode-buffers-cache)
@@ -246,7 +254,13 @@ REGEX, and other buffers by filtering the chaches with REGEX."
         (radix-tree-iter-mappings
          (gethash mode hash)
          (lambda (symb time)
-           (when (<= limit time)
+           (when (and (<= limit time)
+                      ;; drop candidates saved before the option
+                      ;; `company-same-mode-buffers-maximum-word-length` is
+                      ;; introduced.
+                      (<= company-same-mode-buffers-minimum-word-length
+                          (length symb)
+                          company-same-mode-buffers-maximum-word-length))
              (push symb (gethash time hash-by-time)))))
         (let (time-list)
           (maphash (lambda (time symbs)
