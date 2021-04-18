@@ -110,7 +110,7 @@ completion-style `flex'."
   "Search REGEX in the buffer and return all matching
 results. When CURSOR is specified, region before cursor and after
 cursor are searched separately. In addition, the symbol just
-before the cursor is skipped."
+before CURSOR is skipped."
   (let (lst)
     (when cursor
       (save-excursion
