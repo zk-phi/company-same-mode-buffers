@@ -141,12 +141,12 @@ the TREE, then just update timestamp."
   (radix-tree-insert tree key (or float-time company-same-mode-buffers-session-start-time)))
 
 (defun company-same-mode-buffers-tree-search-1 (tree query prefix)
-  (cond ((not (consp tree))             ; empty tree
-         nil)
-        ((null query)                   ; matched
+  (cond ((null query)                   ; matched
          (let (res)
            (radix-tree-iter-mappings tree (lambda (k v) (push (concat prefix k) res)))
            res))
+        ((not (consp tree))             ; empty tree
+         nil)
         (t
          (nconc
           (when (string-match (car query) (caar tree))
