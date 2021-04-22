@@ -169,6 +169,9 @@ the TREE, then just update timestamp."
 
 ;; ---- internals
 
+;; per-buffer radix tree for speeding-up regexp search
+(defvar-local company-same-mode-buffers-2-cache nil)
+
 ;; hash[mode -> tree[symb -> time]]
 (defvar company-same-mode-buffers-cache (make-hash-table :test 'eq))
 (defvar-local company-same-mode-buffers-cache-is-dirty t)
@@ -187,7 +190,9 @@ the TREE, then just update timestamp."
                               (number-to-string company-same-mode-buffers-maximum-word-length)
                               "\\}"))))
         (dolist (s symbols)
-          (setq tree (company-same-mode-buffers-tree-insert tree s)))
+          (setq tree (company-same-mode-buffers-tree-insert tree s))
+          (setq company-same-mode-buffers-2-cache
+                (company-same-mode-buffers-tree-insert company-same-mode-buffers-2-cache s)))
         (puthash major-mode tree company-same-mode-buffers-cache)
         (setq company-same-mode-buffers-cache-is-dirty nil)))))
 
