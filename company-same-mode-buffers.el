@@ -279,6 +279,30 @@ REGEX, and other buffers by filtering the chaches with REGEX."
             (push (cons mode time-list) mode-list)))))
     mode-list))
 
+(defun company-same-mode-buffers-make-save-data-v2 (previous-data)
+  ;; alist[time -> alist[mode -> list[symb]]]
+  (let ((table (make-hash-table :test 'eq))) ; mode -> symbols
+    (dolist (b (buffer-list))
+      (with-current-buffer b
+        (when company-same-mode-buffers-2-cache
+          (let ((symbols (or (gethash major-mode table) ; symbol -> count
+                             (puthash major-mode (make-hash-table :test 'equal) table))))
+            (radix-tree-iter-mappings
+             company-same-mode-buffers-2-cache
+             (lambda (symb _)
+               (puthash symb (1+ (or (gethash symb symbols) 0)) symbols)))))))
+    (let (mode-list)
+      (maphash (lambda (mode symbols)
+                 (let (symb-list)
+                   (maphash (lambda (symb count)
+                              (when (>= count 2) ; saved symbols must appear in at least two buffers
+                                (push symb symb-list)))
+                            symbols)
+                   (when symb-list
+                     (push (cons mode symb-list) mode-list))))
+               table)
+      (cons (cons (float-time) mode-list) previous-data))))
+
 (defun company-same-mode-buffers-history-from-saved-format-v1 (data)
   (let ((hash (make-hash-table :test 'eq)))
     (dolist (mode-row data)
@@ -288,6 +312,17 @@ REGEX, and other buffers by filtering the chaches with REGEX."
             (setq tree (company-same-mode-buffers-tree-insert tree symb (car time-row)))))
         (puthash (car mode-row) tree hash)))
     hash))
+
+(defun company-same-mode-buffers-load-saved-data-v2 (data)
+  ;; alist[time -> alist[mode -> list[symb]]]
+  (let ((limit (- (float-time) company-same-mode-buffers-history-store-limit)))
+    (dolist (time data)
+      (when (<= limit (car time))
+        (dolist (mode (cdr time))
+          (with-current-buffer (get-buffer-create (format " *company-smb %s*" (car mode)))
+            (dolist (symb (cdr mode))
+              (insert symb " "))
+            (setq major-mode (car mode))))))))
 
 (defun company-same-mode-buffers-load-saved-data-v1 (data)
   ;; alist[mode -> alist[time -> list[symb]]]
