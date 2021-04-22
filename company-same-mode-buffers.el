@@ -208,12 +208,16 @@ the TREE, then just update timestamp."
 (defun company-same-mode-buffers-all-completions (query prefix)
   "Collect candidates from the current buffer by searching with
 REGEX, and other buffers by filtering the chaches with REGEX."
-  (nconc (company-same-mode-buffers-search-current-buffer
+  (apply 'nconc
+         (company-same-mode-buffers-search-current-buffer
           (company-same-mode-buffers-query-to-regex query)
           (point))
-         (company-same-mode-buffers-tree-search
-          (gethash major-mode company-same-mode-buffers-cache)
-          query)))
+         (mapcar (lambda (b)
+                   (when (eq major-mode (buffer-local-value 'major-mode b))
+                     (company-same-mode-buffers-tree-search
+                      (buffer-local-value 'company-same-mode-buffers-2-cache b)
+                      query)))
+                 (buffer-list))))
 
 (defun company-same-mode-buffers-fuzzy-all-completions (prefix)
   (let ((case-fold-search company-same-mode-buffers-case-fold)
