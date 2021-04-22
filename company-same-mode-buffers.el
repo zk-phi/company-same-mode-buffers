@@ -311,17 +311,21 @@ REGEX, and other buffers by filtering the chaches with REGEX."
         (prin1 (cons 1 data) (current-buffer))
         (write-file company-same-mode-buffers-history-file)))))
 
-(defun company-same-mode-buffers-load-history ()
+(defun company-same-mode-buffers-maybe-parse-history-file ()
   (when (and company-same-mode-buffers-history-file
              (file-exists-p company-same-mode-buffers-history-file))
     (with-temp-buffer
       (insert-file-contents company-same-mode-buffers-history-file)
-      (let ((data (read (current-buffer))))
-        (cl-case (car data)
-          (1 (setq company-same-mode-buffers-cache
-                   (company-same-mode-buffers-history-from-saved-format-v1 (cdr data)))
-             (company-same-mode-buffers-load-saved-data-v1 (cdr data)))
-          (t (error "unknown history file version")))))))
+      (read (current-buffer)))))
+
+(defun company-same-mode-buffers-load-history ()
+  (let ((data (company-same-mode-buffers-maybe-parse-history-file)))
+    (when data
+      (cl-case (car data)
+        (1 (setq company-same-mode-buffers-cache
+                 (company-same-mode-buffers-history-from-saved-format-v1 (cdr data)))
+           (company-same-mode-buffers-load-saved-data-v1 (cdr data)))
+        (t (error "unknown history file version"))))))
 
 (defun company-same-mode-buffers-initialize ()
   (add-hook 'after-change-functions 'company-same-mode-buffers-invalidate-cache)
