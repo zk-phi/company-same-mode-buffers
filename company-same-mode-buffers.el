@@ -171,9 +171,6 @@ the TREE, then just update timestamp."
 
 ;; per-buffer radix tree for speeding-up regexp search
 (defvar-local company-same-mode-buffers-2-cache nil)
-
-;; hash[mode -> tree[symb -> time]]
-(defvar company-same-mode-buffers-cache (make-hash-table :test 'eq))
 (defvar-local company-same-mode-buffers-cache-is-dirty t)
 
 (defun company-same-mode-buffers-update-cache (&optional buffer)
@@ -182,18 +179,15 @@ the TREE, then just update timestamp."
   (with-current-buffer (or buffer (current-buffer))
     (when (and company-same-mode-buffers-cache-is-dirty
                (derived-mode-p 'prog-mode))
-      (let ((tree (gethash major-mode company-same-mode-buffers-cache))
-            (symbols (company-same-mode-buffers-search-current-buffer
+      (let ((symbols (company-same-mode-buffers-search-current-buffer
                       (concat "\\(:?+\\sw\\|\\s_\\)\\{"
                               (number-to-string company-same-mode-buffers-minimum-word-length)
                               ","
                               (number-to-string company-same-mode-buffers-maximum-word-length)
                               "\\}"))))
         (dolist (s symbols)
-          (setq tree (company-same-mode-buffers-tree-insert tree s))
           (setq company-same-mode-buffers-2-cache
                 (company-same-mode-buffers-tree-insert company-same-mode-buffers-2-cache s)))
-        (puthash major-mode tree company-same-mode-buffers-cache)
         (setq company-same-mode-buffers-cache-is-dirty nil)))))
 
 (defun company-same-mode-buffers-invalidate-cache (&rest _)
@@ -254,31 +248,6 @@ REGEX, and other buffers by filtering the chaches with REGEX."
 
 ;; ---- save and load
 
-(defun company-same-mode-buffers-history-to-saved-format-v1 (hash)
-  ;; alist[mode -> alist[time -> list[symb]]]
-  (let ((limit (- (float-time) company-same-mode-buffers-history-store-limit))
-        (mode-list nil))
-    (dolist (mode (hash-table-keys hash))
-      (let ((hash-by-time (make-hash-table :test 'eql)))
-        (radix-tree-iter-mappings
-         (gethash mode hash)
-         (lambda (symb time)
-           (when (and (<= limit time)
-                      ;; drop candidates saved before the option
-                      ;; `company-same-mode-buffers-maximum-word-length` is
-                      ;; introduced.
-                      (<= company-same-mode-buffers-minimum-word-length
-                          (length symb)
-                          company-same-mode-buffers-maximum-word-length))
-             (push symb (gethash time hash-by-time)))))
-        (let (time-list)
-          (maphash (lambda (time symbs)
-                     (push (cons time symbs) time-list))
-                   hash-by-time)
-          (when time-list
-            (push (cons mode time-list) mode-list)))))
-    mode-list))
-
 (defun company-same-mode-buffers-make-save-data-v2 (previous-data)
   ;; alist[time -> alist[mode -> list[symb]]]
   (let ((table (make-hash-table :test 'eq))) ; mode -> symbols
@@ -302,16 +271,6 @@ REGEX, and other buffers by filtering the chaches with REGEX."
                      (push (cons mode symb-list) mode-list))))
                table)
       (cons (cons (float-time) mode-list) previous-data))))
-
-(defun company-same-mode-buffers-history-from-saved-format-v1 (data)
-  (let ((hash (make-hash-table :test 'eq)))
-    (dolist (mode-row data)
-      (let (tree)
-        (dolist (time-row (cdr mode-row))
-          (dolist (symb (cdr time-row))
-            (setq tree (company-same-mode-buffers-tree-insert tree symb (car time-row)))))
-        (puthash (car mode-row) tree hash)))
-    hash))
 
 (defun company-same-mode-buffers-load-saved-data-v2 (data)
   ;; alist[time -> alist[mode -> list[symb]]]
@@ -339,11 +298,11 @@ REGEX, and other buffers by filtering the chaches with REGEX."
   (when company-same-mode-buffers-history-file
     (company-same-mode-buffers-update-cache-other-buffers)
     (company-same-mode-buffers-update-cache (current-buffer))
-    (let ((data
-           (company-same-mode-buffers-history-to-saved-format-v1 company-same-mode-buffers-cache))
+    (let ((data (company-same-mode-buffers-make-save-data-v2
+                 (cdr (company-same-mode-buffers-maybe-parse-history-file))))
           (enable-local-variables nil))
       (with-temp-buffer
-        (prin1 (cons 1 data) (current-buffer))
+        (prin1 (cons 2 data) (current-buffer))
         (write-file company-same-mode-buffers-history-file)))))
 
 (defun company-same-mode-buffers-maybe-parse-history-file ()
@@ -357,9 +316,8 @@ REGEX, and other buffers by filtering the chaches with REGEX."
   (let ((data (company-same-mode-buffers-maybe-parse-history-file)))
     (when data
       (cl-case (car data)
-        (1 (setq company-same-mode-buffers-cache
-                 (company-same-mode-buffers-history-from-saved-format-v1 (cdr data)))
-           (company-same-mode-buffers-load-saved-data-v1 (cdr data)))
+        (2 (company-same-mode-buffers-load-saved-data-v2 (cdr data)))
+        (1 (company-same-mode-buffers-load-saved-data-v1 (cdr data)))
         (t (error "unknown history file version"))))))
 
 (defun company-same-mode-buffers-initialize ()
