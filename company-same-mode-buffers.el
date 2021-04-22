@@ -170,7 +170,7 @@ the TREE, then just update timestamp."
 ;; ---- internals
 
 ;; per-buffer radix tree for speeding-up regexp search
-(defvar-local company-same-mode-buffers-2-cache nil)
+(defvar-local company-same-mode-buffers-cache nil)
 (defvar-local company-same-mode-buffers-cache-is-dirty t)
 
 (defun company-same-mode-buffers-update-cache (&optional buffer)
@@ -186,8 +186,8 @@ the TREE, then just update timestamp."
                               (number-to-string company-same-mode-buffers-maximum-word-length)
                               "\\}"))))
         (dolist (s symbols)
-          (setq company-same-mode-buffers-2-cache
-                (company-same-mode-buffers-tree-insert company-same-mode-buffers-2-cache s)))
+          (setq company-same-mode-buffers-cache
+                (company-same-mode-buffers-tree-insert company-same-mode-buffers-cache s)))
         (setq company-same-mode-buffers-cache-is-dirty nil)))))
 
 (defun company-same-mode-buffers-invalidate-cache (&rest _)
@@ -209,7 +209,7 @@ REGEX, and other buffers by filtering the chaches with REGEX."
          (mapcar (lambda (b)
                    (when (eq major-mode (buffer-local-value 'major-mode b))
                      (company-same-mode-buffers-tree-search
-                      (buffer-local-value 'company-same-mode-buffers-2-cache b)
+                      (buffer-local-value 'company-same-mode-buffers-cache b)
                       query)))
                  (buffer-list))))
 
@@ -253,11 +253,11 @@ REGEX, and other buffers by filtering the chaches with REGEX."
   (let ((table (make-hash-table :test 'eq))) ; mode -> symbols
     (dolist (b (buffer-list))
       (with-current-buffer b
-        (when company-same-mode-buffers-2-cache
+        (when company-same-mode-buffers-cache
           (let ((symbols (or (gethash major-mode table) ; symbol -> count
                              (puthash major-mode (make-hash-table :test 'equal) table))))
             (radix-tree-iter-mappings
-             company-same-mode-buffers-2-cache
+             company-same-mode-buffers-cache
              (lambda (symb _)
                (puthash symb (1+ (or (gethash symb symbols) 0)) symbols)))))))
     (let (mode-list)
