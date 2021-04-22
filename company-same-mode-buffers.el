@@ -131,14 +131,7 @@ before CURSOR is skipped."
        (cons (cons (car plist) (cadr plist))
              (company-same-mode-buffers-plist-to-alist (cddr plist)))))
 
-;; ---- radix-tree with timestamp
-
-(defconst company-same-mode-buffers-session-start-time (float-time))
-
-(defun company-same-mode-buffers-tree-insert (tree key &optional float-time)
-  "Insert KEY to TREE with timestamp. If KEY already exists in
-the TREE, then just update timestamp."
-  (radix-tree-insert tree key (or float-time company-same-mode-buffers-session-start-time)))
+;; ---- radix-tree
 
 (defun company-same-mode-buffers-tree-search-1 (tree query prefix)
   (cond ((null query)                   ; matched
@@ -187,7 +180,7 @@ the TREE, then just update timestamp."
                               "\\}"))))
         (dolist (s symbols)
           (setq company-same-mode-buffers-cache
-                (company-same-mode-buffers-tree-insert company-same-mode-buffers-cache s)))
+                (radix-tree-insert company-same-mode-buffers-cache s t)))
         (setq company-same-mode-buffers-cache-is-dirty nil)))))
 
 (defun company-same-mode-buffers-invalidate-cache (&rest _)
