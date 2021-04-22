@@ -285,6 +285,17 @@ REGEX, and other buffers by filtering the chaches with REGEX."
         (puthash (car mode-row) tree hash)))
     hash))
 
+(defun company-same-mode-buffers-load-saved-data-v1 (data)
+  ;; alist[mode -> alist[time -> list[symb]]]
+  (let ((limit (- (float-time) company-same-mode-buffers-history-store-limit)))
+    (dolist (mode data)
+      (with-current-buffer (get-buffer-create (format " *company-smb %s*" (car mode)))
+        (dolist (time (cdr mode))
+          (when (<= limit (car time))
+            (dolist (symb (cdr time))
+              (insert symb " "))))
+        (setq major-mode (car mode))))))
+
 (defun company-same-mode-buffers-save-history ()
   (when company-same-mode-buffers-history-file
     (company-same-mode-buffers-update-cache-other-buffers)
@@ -304,7 +315,8 @@ REGEX, and other buffers by filtering the chaches with REGEX."
       (let ((data (read (current-buffer))))
         (cl-case (car data)
           (1 (setq company-same-mode-buffers-cache
-                   (company-same-mode-buffers-history-from-saved-format-v1 (cdr data))))
+                   (company-same-mode-buffers-history-from-saved-format-v1 (cdr data)))
+             (company-same-mode-buffers-load-saved-data-v1 (cdr data)))
           (t (error "unknown history file version")))))))
 
 (defun company-same-mode-buffers-initialize ()
