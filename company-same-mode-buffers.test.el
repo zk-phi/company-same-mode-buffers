@@ -1,4 +1,4 @@
-(require 'company-same-mode-buffers)
+(require 'company-same-mode-buffers-core)
 
 (ert-deftest company-same-mode-buffers-search-regex ()
   (let ((basic (company-same-mode-buffers-matcher-basic "smb"))

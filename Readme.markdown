@@ -1,8 +1,8 @@
-# company-same-mode-buffers.el
+# company-same-mode-buffers.el / complete-same-mode-buffers.el
 
 ![screencast](img/screencast.gif)
 
-Company backend to complete symbols in same mode buffers (like
+Company / completion-at-point backend to complete symbols in same mode buffers (like
 `ac-source-words-in-same-mode-buffers`)
 
 with following features:
@@ -13,12 +13,26 @@ with following features:
 
 ## Installation
 
-load and initialize this package, and add to `company-backends`.
+load and initialize this package, and,
+
+### company
+
+add to `company-backends`.
 
 ```emacs-lisp
 (require 'company-same-mode-buffers)
 (company-same-mode-buffers-initialize)
 (push 'company-same-mode-buffers company-backends)
+```
+
+### completion-at-point (corfu)
+
+add to `completion-at-point-functions`.
+
+```emacs-lisp
+(require complete-same-mode-buffers)
+(company-same-mode-buffers-initialize)
+(push 'complete-same-mode-buffers (default-value 'completion-at-point-functions))
 ```
 
 ### History file
