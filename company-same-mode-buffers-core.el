@@ -25,19 +25,18 @@ when `company-same-mode-buffers-case-fold' is non-nil."
   :type '(list function))
 
 (defcustom company-same-mode-buffers-minimum-word-length 4
-  "Minimum length of words to save."
+  "Minimum length of the words to be saved."
   :group 'company-same-mode-buffers
   :type 'integer)
 
 (defcustom company-same-mode-buffers-maximum-word-length 80
-  "Maximum length of words to save. This may be useful to avoid
-  long meaningless words (like base64 string) to be saved."
+  "Maximum length of the words to be saved. This may be useful to
+  avoid saving long, meaningless words (like a base64 string)."
   :group 'company-same-mode-buffers
   :type 'integer)
 
 (defcustom company-same-mode-buffers-history-file nil
-  "When non-nil, save history to a file in order to share
-  completion candidates across sessions."
+  "When non-nil, save candidates to a file for future sessions."
   :group 'company-same-mode-buffers
   :type 'string)
 
@@ -48,6 +47,9 @@ when `company-same-mode-buffers-case-fold' is non-nil."
   :type 'number)
 
 ;; ---- matchers
+
+;; A query construct is a pair of 1. prefix-regex (that can be skipped) and 2. a key character (that
+;; cannot be skipped)
 
 (defun company-same-mode-buffers-query-construct-any-followed-by (str)
   (cons "\\(?:\\sw\\|\\s_\\)*?" (regexp-quote str)))
@@ -61,14 +63,20 @@ when `company-same-mode-buffers-case-fold' is non-nil."
 (defun company-same-mode-buffers-query-construct-exact (str)
   (cons "" (regexp-quote str)))
 
+;; A matcher creates a query, which is a list of query constructs. Unlike regex, matchers can also
+;; be used to traverse radix tree with `company-same-mode-buffers-search-tree'.
+
+;; Regex: \(s\)\sw*\(-b\).*
+;; -> Matcher: (("" . "s") ("\\sw*" . "-") ("" . "b"))
+
 (defun company-same-mode-buffers-matcher-basic (prefix)
   "A matcher that matches symbols start with PREFIX."
   (mapcar (lambda (s) (company-same-mode-buffers-query-construct-exact s))
           (split-string prefix "" t)))
 
 (defun company-same-mode-buffers-matcher-partial (prefix)
-  "A matcher that matches multiword symbols like completoin-style
-`partial-completion'."
+  "A matcher that matches multiword symbols like
+`partial-completion' style."
   (mapcar (lambda (s)
             (cond ((= (char-syntax (aref s 0)) ?_) ; word-separator
                    (company-same-mode-buffers-query-construct-any-word-followed-by s))
@@ -296,6 +304,7 @@ REGEX, and other buffers by filtering the chaches with REGEX."
         (t (error "unknown history file version"))))))
 
 (defun company-same-mode-buffers-initialize ()
+  "Load saved history file, and prepare hooks to update the history."
   (add-hook 'after-change-functions 'company-same-mode-buffers-invalidate-cache)
   (add-hook 'kill-buffer-hook 'company-same-mode-buffers-update-cache)
   (add-hook 'kill-emacs-hook 'company-same-mode-buffers-save-history)
