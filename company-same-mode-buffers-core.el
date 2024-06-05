@@ -196,9 +196,8 @@ before CURSOR is skipped."
     (unless (eq buf (current-buffer))
       (company-same-mode-buffers-update-cache buf))))
 
-(defun company-same-mode-buffers-all-completions (query prefix)
-  "Collect candidates from the current buffer by searching with
-REGEX, and other buffers by filtering the chaches with REGEX."
+(defun company-same-mode-buffers-all-completions (query)
+  "Collect candidates matching QUERY from the current buffer and the cache."
   (apply 'nconc
          (company-same-mode-buffers-search-current-buffer
           (company-same-mode-buffers-query-to-regex query)
@@ -211,22 +210,14 @@ REGEX, and other buffers by filtering the chaches with REGEX."
                  (buffer-list))))
 
 (defun company-same-mode-buffers-fuzzy-all-completions (prefix)
+  "Collect candidates from the current buffer and the cache,
+following the matching strategy defiend in
+`company-same-mode-buffers-matchers'."
   (let ((case-fold-search company-same-mode-buffers-case-fold)
         (matchers company-same-mode-buffers-matchers)
         res)
     (while (and (null res) matchers)
-      (setq res (company-same-mode-buffers-all-completions (funcall (pop matchers) prefix) prefix)))
-    res))
-
-(defun company-same-mode-buffers-make-match-data (candidate prefix)
-  (let ((case-fold-search company-same-mode-buffers-case-fold)
-        (matchers company-same-mode-buffers-matchers)
-        res)
-    (while (and (null res) matchers)
-      (when (string-match
-             (company-same-mode-buffers-query-to-regex (funcall (pop matchers) prefix))
-             candidate)
-        (setq res (company-same-mode-buffers-plist-to-alist (cddr (match-data t))))))
+      (setq res (company-same-mode-buffers-all-completions (funcall (pop matchers) prefix))))
     res))
 
 ;; ---- save and load

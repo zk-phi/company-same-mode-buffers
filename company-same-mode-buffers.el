@@ -4,6 +4,17 @@
 (require 'company)
 (require 'company-same-mode-buffers-core)
 
+(defun company-same-mode-buffers-make-match-data (candidate prefix)
+  (let ((case-fold-search company-same-mode-buffers-case-fold)
+        (matchers company-same-mode-buffers-matchers)
+        res)
+    (while (and (null res) matchers)
+      (when (string-match
+             (company-same-mode-buffers-query-to-regex (funcall (pop matchers) prefix))
+             candidate)
+        (setq res (company-same-mode-buffers-plist-to-alist (cddr (match-data t))))))
+    res))
+
 (defun company-same-mode-buffers (command &optional arg &rest ignored)
   "like `company-dabbrev' but flex."
   (interactive (list 'interactive))
