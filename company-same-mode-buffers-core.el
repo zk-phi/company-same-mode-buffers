@@ -257,17 +257,6 @@ following the matching strategy defiend in
               (insert symb " "))
             (setq major-mode (car mode))))))))
 
-(defun company-same-mode-buffers-load-saved-data-v1 (data)
-  ;; alist[mode -> alist[time -> list[symb]]]
-  (let ((limit (- (float-time) company-same-mode-buffers-history-store-limit)))
-    (dolist (mode data)
-      (with-current-buffer (get-buffer-create (format " *company-smb %s*" (car mode)))
-        (dolist (time (cdr mode))
-          (when (<= limit (car time))
-            (dolist (symb (cdr time))
-              (insert symb " "))))
-        (setq major-mode (car mode))))))
-
 (defun company-same-mode-buffers-save-history ()
   (when company-same-mode-buffers-history-file
     (company-same-mode-buffers-update-cache-other-buffers)
@@ -291,7 +280,6 @@ following the matching strategy defiend in
     (when data
       (cl-case (car data)
         (2 (company-same-mode-buffers-load-saved-data-v2 (cdr data)))
-        (1 (company-same-mode-buffers-load-saved-data-v1 (cdr data)))
         (t (error "unknown history file version"))))))
 
 (defun company-same-mode-buffers-initialize ()
