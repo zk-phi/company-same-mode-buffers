@@ -169,6 +169,7 @@ before CURSOR is skipped."
 ;; per-buffer radix tree for speeding-up regexp search
 (defvar-local company-same-mode-buffers-cache nil)
 (defvar-local company-same-mode-buffers-cache-is-dirty t)
+(defvar-local company-same-mode-buffers--buffer-modified nil)
 
 (defun company-same-mode-buffers-update-cache (&optional buffer)
   "Put all symbols in the buffer into
@@ -188,7 +189,8 @@ before CURSOR is skipped."
         (setq company-same-mode-buffers-cache-is-dirty nil)))))
 
 (defun company-same-mode-buffers-invalidate-cache (&rest _)
-  (setq company-same-mode-buffers-cache-is-dirty t))
+  (setq company-same-mode-buffers-cache-is-dirty t
+        company-same-mode-buffers--buffer-modified t))
 
 (defun company-same-mode-buffers-update-cache-other-buffers ()
   "Update cache for all buffers except for the current buffer."
@@ -224,21 +226,25 @@ following the matching strategy defiend in
 
 (defun company-same-mode-buffers-make-save-data-v2 (previous-data)
   ;; alist[time -> alist[mode -> list[symb]]]
-  (let ((table (make-hash-table :test 'eq))) ; mode -> symbols
+  (let ((table (make-hash-table :test 'eq))) ; table[mode -> table[symbol -> (count . write-flag)]]
     (dolist (b (buffer-list))
       (with-current-buffer b
         (when company-same-mode-buffers-cache
-          (let ((symbols (or (gethash major-mode table) ; symbol -> count
+          (let ((symbols (or (gethash major-mode table) ; table[symbol -> (count . write-flag)]
                              (puthash major-mode (make-hash-table :test 'equal) table))))
             (radix-tree-iter-mappings
              company-same-mode-buffers-cache
              (lambda (symb _)
-               (puthash symb (1+ (or (gethash symb symbols) 0)) symbols)))))))
+               (let* ((oldvalue (or (gethash symb symbols) '(0 . nil)))
+                      (count (1+ (car oldvalue)))
+                      (write-flag (or (cdr oldvalue) company-same-mode-buffers--buffer-modified)))
+                 (puthash symb (cons count write-flag) symbols))))))))
     (let (mode-list)
       (maphash (lambda (mode symbols)
                  (let (symb-list)
-                   (maphash (lambda (symb count)
-                              (when (>= count 2) ; saved symbols must appear in at least two buffers
+                   (maphash (lambda (symb value)
+                              (when (and (>= (car value) 2) ; appears in at least two buffers
+                                         (cdr value))       ; appears at least one modified buffer
                                 (push symb symb-list)))
                             symbols)
                    (when symb-list

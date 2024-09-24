@@ -89,27 +89,38 @@ An alist of the form `alist[timestamp => alist[major-mode => list[symbol]]]` is 
 file.
 
 ``` emacs-lisp
-((TIMESTAMP (MAJOR_MODE SYMBOL ...) ...) ...)
-```
-
-### Loading history file
-
-For each alist entries (`cons[timestamp, alist[major-mode => symbol]]`), symbols in the entry are
-simply inserted into a temporary buffer with corresponding major-mode. One temporary buffer is
-created for one major-mode.
-
-``` emacs-lisp
+;; example:
 ((<timestamp>
   (emacs-lisp-mode "save-excursion" "defun" "defvar")
   (js-mode "function" "return"))
  (<timestamp>
-  (emacs-lisp-mode "defconst")
+  (emacs-lisp-mode "defconst" "defun") ; duplicated symbols may saved with different timestamps
   (css-mode "margin")))
 ```
 
+### Saving candidates
+
+When killing Emacs, `company-same-mode-buffers` visits all `prog-mode` buffers and collects all
+symbols in these buffers. Then for each symbols collected, if the symbol
+
+1. appears in more than two buffers, and
+2. appears in at least one user-modified buffers,
+
+the symbol is added to the new history entry.
+
+To save memory, symbols that appear in only one buffer (like buffer-local variables), and symbols that do not appear in buffers that user modify (like logs, or files created with code-generators), are not saved.
+
+A known downside is: If a buffer is killed before killing Emacs, symbols in that buffer are NOT
+saved.
+
+### Loading history file
+
+All symbols in unexpired history entries are simply inserted into a temporary buffer, with
+corresponding major-mode. One temporary buffer is created for one major-mode.
+
 ``` emacs-lisp
 ;; a temporary buffer with emacs-lisp-mode
-save-excursion defun defvar defconst
+save-excursion defun defvar defconst defun
 ```
 
 ``` javascript
@@ -122,13 +133,15 @@ function return
 margin
 ```
 
-Note that each timestamp of the entries is compared to
-`company-same-mode-buffers-history-store-limit`, and if it's older than the threshold, the record is
-ignored.
+These temporary buffers are also visited when saving the history file. As a result,
 
-### Saving history file
+new symbols are added to the history file, when
 
-When killing Emacs, `company-same-mode-buffers` visits all buffers (that derives `prog-mode`, including temporary buffers created by `company-same-mode-buffers`) and collect all symbols. If (and only if, to save the memory) a symbol appears in more than two buffers, then the symbols is saved to the history file, with updated timestamp. Note that, we don't want file-specific symbols (like internal variable names) to be saved.
+1. the symbol appears in more than two buffers, and
+2. the symbol appears in at least one user-modified buffers
 
-A known downside is: If a buffer is killed before killing Emacs, symbols in that buffer are NOT
-saved.
+and symbols from the previous sessions are re-added (with updated timestamp) when
+
+1. the symbol appears in at least one user-modified, non-temporary buffers
+
+Other symbols from the previous sessions are kept as they are (without updated timestamp).
