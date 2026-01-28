@@ -4,6 +4,12 @@
 (require 'company)
 (require 'company-same-mode-buffers-core)
 
+(defun company-same-mode-buffers-plist-to-alist (plist)
+  "Convert plist to alist."
+  (and plist
+       (cons (cons (car plist) (cadr plist))
+             (company-same-mode-buffers-plist-to-alist (cddr plist)))))
+
 (defun company-same-mode-buffers-make-match-data (candidate prefix)
   (let ((case-fold-search company-same-mode-buffers-case-fold)
         (matchers company-same-mode-buffers-matchers)

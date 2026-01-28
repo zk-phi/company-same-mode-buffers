@@ -129,12 +129,6 @@ before CURSOR is skipped."
         (push (match-string-no-properties 0) lst)))
     lst))
 
-(defun company-same-mode-buffers-plist-to-alist (plist)
-  "Convert plist to alist."
-  (and plist
-       (cons (cons (car plist) (cadr plist))
-             (company-same-mode-buffers-plist-to-alist (cddr plist)))))
-
 ;; ---- radix-tree
 
 (defun company-same-mode-buffers-tree-search-1 (subtree query prefix)
