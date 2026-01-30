@@ -271,20 +271,29 @@ following the matching strategy defiend in
            (new-entry (delq nil modes)))
       (cons (cons (float-time) new-entry) previous-data))))
 
-(defun company-same-mode-buffers-load-saved-data-v2 (data)
-  ;; alist[time -> alist[mode -> list[symb]]]
-  (let ((limit (- (float-time) company-same-mode-buffers-history-store-limit)))
-    (dolist (time data)
-      (when (<= limit (car time))
-        (dolist (mode (cdr time))
-          (let ((tree (company-same-mode-buffers--cache-get-tree (car mode) nil)))
-            (dolist (s (cdr mode))
-              (setq tree (radix-tree-insert tree s t)))
-            (company-same-mode-buffers--cache-update-tree
-             (car mode)
-             nil
-             nil
-             tree)))))))
+(defun company-same-mode-buffers-load-saved-data-v3 (data)
+  ;; alist[mode -> sorted-list[symb]]
+  (dolist (mode data)
+    (let ((tree (company-same-mode-buffers--cache-get-tree (car mode) nil)))
+      (dolist (s (cdr mode))
+        (setq tree (radix-tree-insert tree s t)))
+      (company-same-mode-buffers--cache-update-tree
+       (car mode)
+       nil
+       nil
+       tree))))
+
+(defun company-same-mode-buffers--upgrade-history-v2-to-v3 (data)
+  ;; v2: sorted-alist[time -> alist[mode -> list[symb]]]
+  ;; v3: alist[mode -> sorted-unique-list[symb]]
+  (let (modes)
+    (dolist (session data)
+      (dolist (mode (cdr session))
+        (setf (alist-get (car mode) modes)
+              (nconc (alist-get (car mode) modes) (cdr mode)))))
+    (dolist (mode modes)
+      (delete-dups (cdr mode)))
+    modes))
 
 (defun company-same-mode-buffers--maybe-read-history-file ()
   (when (and company-same-mode-buffers-history-file
@@ -300,6 +309,14 @@ following the matching strategy defiend in
         (2 (cdr data))
         (t (error "unsupported history file version"))))))
 
+(defun company-same-mode-buffers--parse-history-file-v3 ()
+  (let ((data (company-same-mode-buffers--maybe-read-history-file)))
+    (when data
+      (cl-case (car data)
+        (3 (cdr data))
+        (2 (company-same-mode-buffers--upgrade-history-v2-to-v3 (cdr data)))
+        (t (error "unsupported history file version"))))))
+
 (defun company-same-mode-buffers-save-history ()
   (when company-same-mode-buffers-history-file
     (company-same-mode-buffers-update-cache-other-buffers)
@@ -312,8 +329,8 @@ following the matching strategy defiend in
         (write-file company-same-mode-buffers-history-file)))))
 
 (defun company-same-mode-buffers-load-history ()
-  (company-same-mode-buffers-load-saved-data-v2
-   (company-same-mode-buffers--parse-history-file-v2)))
+  (company-same-mode-buffers-load-saved-data-v3
+   (company-same-mode-buffers--parse-history-file-v3)))
 
 (defun company-same-mode-buffers-initialize ()
   "Load saved history file, and prepare hooks to update the history."
