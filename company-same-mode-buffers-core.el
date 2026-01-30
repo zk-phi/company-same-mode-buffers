@@ -45,11 +45,10 @@ when `company-same-mode-buffers-case-fold' is non-nil."
   :group 'company-same-mode-buffers
   :type 'number)
 
-(defcustom company-same-mode-buffers-history-store-limit (* 7 24 60 60)
-  "How long (in seconds) candidates should be stored in the
-  history file."
-  :group 'company-same-mode-buffers
-  :type 'number)
+(make-obsolete-variable
+ 'company-same-mode-buffers-history-store-limit
+ "company-same-mode-buffers-history-store-capacity"
+ "2026-01-30")
 
 ;; ---- utils
 
