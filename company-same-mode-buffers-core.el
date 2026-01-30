@@ -196,11 +196,11 @@ before CURSOR is skipped."
                buffer-file-name
                (derived-mode-p 'prog-mode))
       (let ((symbols (company-same-mode-buffers-search-current-buffer
-                      (concat "\\(:?+\\sw\\|\\s_\\)\\{"
+                      (concat "\\_<\\(?:\\sw\\|\\s_\\)\\{"
                               (number-to-string company-same-mode-buffers-minimum-word-length)
                               ","
                               (number-to-string company-same-mode-buffers-maximum-word-length)
-                              "\\}")))
+                              "\\}\\_>")))
             (tree (company-same-mode-buffers--cache-get-tree major-mode buffer-file-name)))
         (dolist (s symbols)
           (setq tree (radix-tree-insert tree s t)))
