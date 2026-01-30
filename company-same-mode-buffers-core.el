@@ -46,6 +46,13 @@ when `company-same-mode-buffers-case-fold' is non-nil."
   :group 'company-same-mode-buffers
   :type 'number)
 
+;; ---- utils
+
+(defun complete-same-mode-buffers--maphash (fn table)
+  (let (res)
+    (maphash (lambda (k v) (push (funcall fn k v) res)) table)
+    res))
+
 ;; ---- matchers
 
 ;; A query construct is a pair of 1. prefix-regex (that can be skipped) and 2. a key character (that
@@ -161,29 +168,47 @@ before CURSOR is skipped."
 ;; ---- internals
 
 ;; per-buffer radix tree for speeding-up regexp search
-(defvar-local company-same-mode-buffers-cache nil)
-(defvar-local company-same-mode-buffers-cache-is-dirty t)
+;; table[mode -> table[path -> (modified-p . tree[symb])]]
+;; * path===nil for candidates from the history file
+(defvar company-same-mode-buffers--cache (make-hash-table :test 'eq))
+(defvar-local company-same-mode-buffers--cache-is-dirty t)
 (defvar-local company-same-mode-buffers--buffer-modified nil)
+
+(defun company-same-mode-buffers--cache-get-tree (mode file)
+  (let ((tbl (or (gethash mode company-same-mode-buffers--cache)
+                 (puthash mode (make-hash-table :test 'equal) company-same-mode-buffers--cache))))
+    (cdr (gethash file tbl))))
+
+(defun company-same-mode-buffers--cache-update-tree (mode file modified-p tree)
+  (let ((tbl (or (gethash mode company-same-mode-buffers--cache)
+                 (puthash mode (make-hash-table :test 'equal) company-same-mode-buffers--cache))))
+    (puthash file (cons modified-p tree) tbl)))
 
 (defun company-same-mode-buffers-update-cache (&optional buffer)
   "Put all symbols in the buffer into
-`company-same-mode-buffers-cache'."
+`company-same-mode-buffers--cache'."
   (with-current-buffer (or buffer (current-buffer))
-    (when (and company-same-mode-buffers-cache-is-dirty
+    (when (and company-same-mode-buffers--cache-is-dirty
+               buffer-file-name
                (derived-mode-p 'prog-mode))
       (let ((symbols (company-same-mode-buffers-search-current-buffer
                       (concat "\\(:?+\\sw\\|\\s_\\)\\{"
                               (number-to-string company-same-mode-buffers-minimum-word-length)
                               ","
                               (number-to-string company-same-mode-buffers-maximum-word-length)
-                              "\\}"))))
+                              "\\}")))
+            (tree (company-same-mode-buffers--cache-get-tree major-mode buffer-file-name)))
         (dolist (s symbols)
-          (setq company-same-mode-buffers-cache
-                (radix-tree-insert company-same-mode-buffers-cache s t)))
-        (setq company-same-mode-buffers-cache-is-dirty nil)))))
+          (setq tree (radix-tree-insert tree s t)))
+        (company-same-mode-buffers--cache-update-tree
+         major-mode
+         buffer-file-name
+         company-same-mode-buffers--buffer-modified
+         tree)
+        (setq company-same-mode-buffers--cache-is-dirty nil)))))
 
 (defun company-same-mode-buffers-invalidate-cache (&rest _)
-  (setq company-same-mode-buffers-cache-is-dirty t
+  (setq company-same-mode-buffers--cache-is-dirty t
         company-same-mode-buffers--buffer-modified t))
 
 (defun company-same-mode-buffers-update-cache-other-buffers ()
@@ -198,12 +223,10 @@ before CURSOR is skipped."
          (company-same-mode-buffers-search-current-buffer
           (company-same-mode-buffers-query-to-regex query)
           (point))
-         (mapcar (lambda (b)
-                   (when (eq major-mode (buffer-local-value 'major-mode b))
-                     (company-same-mode-buffers-tree-search
-                      (buffer-local-value 'company-same-mode-buffers-cache b)
-                      query)))
-                 (buffer-list))))
+         (complete-same-mode-buffers--maphash
+          (lambda (file entry)          ; entry is a (modified-p . tree[symb])
+            (company-same-mode-buffers-tree-search (cdr entry) query))
+          (gethash major-mode company-same-mode-buffers--cache))))
 
 (defun company-same-mode-buffers-fuzzy-all-completions (prefix)
   "Collect candidates from the current buffer and the cache,
@@ -221,30 +244,32 @@ following the matching strategy defiend in
 (defun company-same-mode-buffers-make-save-data-v2 (previous-data)
   ;; alist[time -> alist[mode -> list[symb]]]
   (let ((table (make-hash-table :test 'eq))) ; table[mode -> table[symbol -> (count . write-flag)]]
-    (dolist (b (buffer-list))
-      (with-current-buffer b
-        (when company-same-mode-buffers-cache
-          (let ((symbols (or (gethash major-mode table) ; table[symbol -> (count . write-flag)]
-                             (puthash major-mode (make-hash-table :test 'equal) table))))
-            (radix-tree-iter-mappings
-             company-same-mode-buffers-cache
-             (lambda (symb _)
-               (let* ((oldvalue (or (gethash symb symbols) '(0 . nil)))
-                      (count (1+ (car oldvalue)))
-                      (write-flag (or (cdr oldvalue) company-same-mode-buffers--buffer-modified)))
-                 (puthash symb (cons count write-flag) symbols))))))))
-    (let (mode-list)
-      (maphash (lambda (mode symbols)
-                 (let (symb-list)
-                   (maphash (lambda (symb value)
-                              (when (and (>= (car value) 2) ; appears in at least two buffers
-                                         (cdr value))       ; appears at least one modified buffer
-                                (push symb symb-list)))
-                            symbols)
-                   (when symb-list
-                     (push (cons mode symb-list) mode-list))))
-               table)
-      (cons (cons (float-time) mode-list) previous-data))))
+    (maphash (lambda (mode file-table)
+               (let ((symbols (or (gethash major-mode table) ; table[symbol -> (count . write-flag)]
+                                  (puthash major-mode (make-hash-table :test 'equal) table))))
+                 (maphash (lambda (path entry)
+                            (radix-tree-iter-mappings
+                             (cdr entry)
+                             (lambda (symb _)
+                               (let* ((oldvalue (or (gethash symb symbols) '(0 . nil)))
+                                      (count (1+ (car oldvalue)))
+                                      (write-flag (or (cdr oldvalue) (car entry))))
+                                 (puthash symb (cons count write-flag) symbols)))))
+                          file-table)))
+             company-same-mode-buffers--cache)
+    (let* ((modes (complete-same-mode-buffers--maphash
+                   (lambda (mode symbols)
+                     (let* ((symb-list (complete-same-mode-buffers--maphash
+                                        (lambda (symb value)
+                                          (and (>= (car value) 2) ; appears in at least two buffers
+                                               (cdr value) ; appears in at least one modified buffer
+                                               symb))
+                                        symbols))
+                            (filtered (delq nil symb-list)))
+                       (and filtered (cons mode filtered))))
+                   table))
+           (new-entry (delq nil modes)))
+      (cons (cons (float-time) new-entry) previous-data))))
 
 (defun company-same-mode-buffers-load-saved-data-v2 (data)
   ;; alist[time -> alist[mode -> list[symb]]]
@@ -252,10 +277,14 @@ following the matching strategy defiend in
     (dolist (time data)
       (when (<= limit (car time))
         (dolist (mode (cdr time))
-          (with-current-buffer (get-buffer-create (format " *company-smb %s*" (car mode)))
-            (dolist (symb (cdr mode))
-              (insert symb " "))
-            (setq major-mode (car mode))))))))
+          (let ((tree (company-same-mode-buffers--cache-get-tree (car mode) nil)))
+            (dolist (s (cdr mode))
+              (setq tree (radix-tree-insert tree s t)))
+            (company-same-mode-buffers--cache-update-tree
+             (car mode)
+             nil
+             nil
+             tree)))))))
 
 (defun company-same-mode-buffers-save-history ()
   (when company-same-mode-buffers-history-file

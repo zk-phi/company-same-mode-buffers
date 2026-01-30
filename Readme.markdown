@@ -79,7 +79,9 @@ You may optionally save completion candidates to a file for future sessions.
 ## Internals
 ### Symbol caching
 
-In order to speed-up searching, symbols are collected in per-buffer radix-trees, called "cache"s.
+In order to speed-up searching, symbols are collected in per-file radix-trees, called "cache"s.
+
+A known downside is: symbols in non-file buffers (like `*scratch*`) are not completed.
 
 To avoid heavy updating, the current buffer's cache is NOT updated. Instead, symbols in the current buffer are searched by simple regex-search.
 
@@ -100,47 +102,21 @@ file.
 
 ### Saving candidates
 
-When killing Emacs, `company-same-mode-buffers` visits all `prog-mode` buffers and collects all
-symbols in these buffers. Then for each symbols collected, if the symbol
+When killing Emacs, `company-same-mode-buffers` collects all symbols from per-file caches.
+Then for each symbols collected, if the symbol
 
-1. appears in more than two buffers, and
-2. appears in at least one user-modified buffers,
+1. appears in more than two files, and
+2. appears in at least one user-modified files,
 
 the symbol is added to the new history entry.
 
-To save memory, symbols that appear in only one buffer (like buffer-local variables), and symbols that do not appear in buffers that user modify (like logs, or files created with code-generators), are not saved.
-
-A known downside is: If a buffer is killed before killing Emacs, symbols in that buffer are NOT
-saved.
+To save memory, symbols that appear in only one file (like local variables), and symbols that do not appear in files that user modify (like logs, or files created with code-generators), are not saved.
 
 ### Loading history file
 
-All symbols in unexpired history entries are simply inserted into a temporary buffer, with
-corresponding major-mode. One temporary buffer is created for one major-mode.
+All symbols in unexpired history entries are also added to the per-file cache, as an unmodified file with no name (`nil`).
 
-``` emacs-lisp
-;; a temporary buffer with emacs-lisp-mode
-save-excursion defun defvar defconst defun
-```
-
-``` javascript
-// a temporary buffer with js-mode
-function return
-```
-
-``` css
-/* a temporary buffer with css-mode */
-margin
-```
-
-These temporary buffers are also visited when saving the history file. As a result,
-
-new symbols are added to the history file, when
-
-1. the symbol appears in more than two buffers, and
-2. the symbol appears in at least one user-modified buffers
-
-and symbols from the previous sessions are re-added (with updated timestamp) when
+As a result, symbols from the previous sessions are re-added (with updated timestamp) when
 
 1. the symbol appears in at least one user-modified, non-temporary buffers
 
