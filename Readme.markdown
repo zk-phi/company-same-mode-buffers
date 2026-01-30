@@ -85,20 +85,17 @@ A known downside is: symbols in non-file buffers (like `*scratch*`) are not comp
 
 To avoid heavy updating, the current buffer's cache is NOT updated. Instead, symbols in the current buffer are searched by simple regex-search.
 
-### History file internals (v2)
+### History file internals (v3)
 
-An alist of the form `alist[timestamp => alist[major-mode => list[symbol]]]` is saved to the history
-file.
+An alist of the form `alist[major-mode => sorted-unique-list[symbol]]` is saved to the history file.
 
 ``` emacs-lisp
 ;; example:
-((<timestamp>
-  (emacs-lisp-mode "save-excursion" "defun" "defvar")
-  (js-mode "function" "return"))
- (<timestamp>
-  (emacs-lisp-mode "defconst" "defun") ; duplicated symbols may saved with different timestamps
-  (css-mode "margin")))
+((emacs-lisp-mode "save-excursion" "defun" "defvar")
+ (js-mode "function" "return"))
 ```
+
+Each symbol lists are sorted by most-recent-appearance.
 
 ### Saving candidates
 
@@ -108,7 +105,7 @@ Then for each symbols collected, if the symbol
 1. appears in more than two files, and
 2. appears in at least one user-modified files,
 
-the symbol is added to the new history entry.
+the symbol is prepended to the new history entry.
 
 To save memory, symbols that appear in only one file (like local variables), and symbols that do not appear in files that user modify (like logs, or files created with code-generators), are not saved.
 
@@ -116,8 +113,8 @@ To save memory, symbols that appear in only one file (like local variables), and
 
 All symbols in unexpired history entries are also added to the per-file cache, as an unmodified file with no name (`nil`).
 
-As a result, symbols from the previous sessions are re-added (with updated timestamp) when
+As a result, symbols from the previous sessions are re-prepended when
 
 1. the symbol appears in at least one user-modified, non-temporary buffers
 
-Other symbols from the previous sessions are kept as they are (without updated timestamp).
+Other symbols from the previous sessions are kept at the same position in the sorted-list.

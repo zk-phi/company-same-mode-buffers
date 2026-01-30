@@ -40,6 +40,11 @@ when `company-same-mode-buffers-case-fold' is non-nil."
   :group 'company-same-mode-buffers
   :type 'string)
 
+(defcustom company-same-mode-buffers-history-store-capacity 10000
+  "How many symbols should be stored in the history file."
+  :group 'company-same-mode-buffers
+  :type 'number)
+
 (defcustom company-same-mode-buffers-history-store-limit (* 7 24 60 60)
   "How long (in seconds) candidates should be stored in the
   history file."
@@ -241,8 +246,8 @@ following the matching strategy defiend in
 
 ;; ---- save and load
 
-(defun company-same-mode-buffers-make-save-data-v2 (previous-data)
-  ;; alist[time -> alist[mode -> list[symb]]]
+;; alist[mode -> sorted-unique-list[symb]]
+(defun company-same-mode-buffers-make-save-data-v3 (previous-data)
   (let ((table (make-hash-table :test 'eq))) ; table[mode -> table[symbol -> (count . write-flag)]]
     (maphash (lambda (mode file-table)
                (let ((symbols (or (gethash major-mode table) ; table[symbol -> (count . write-flag)]
@@ -257,22 +262,29 @@ following the matching strategy defiend in
                                  (puthash symb (cons count write-flag) symbols)))))
                           file-table)))
              company-same-mode-buffers--cache)
-    (let* ((modes (complete-same-mode-buffers--maphash
-                   (lambda (mode symbols)
-                     (let* ((symb-list (complete-same-mode-buffers--maphash
-                                        (lambda (symb value)
-                                          (and (>= (car value) 2) ; appears in at least two buffers
-                                               (cdr value) ; appears in at least one modified buffer
-                                               symb))
-                                        symbols))
-                            (filtered (delq nil symb-list)))
-                       (and filtered (cons mode filtered))))
-                   table))
-           (new-entry (delq nil modes)))
-      (cons (cons (float-time) new-entry) previous-data))))
+    (let ((new-data
+           (complete-same-mode-buffers--maphash
+            (lambda (mode symbols)
+              (let* ((symb-list (complete-same-mode-buffers--maphash
+                                 (lambda (symb value)
+                                   (and (>= (car value) 2) ; appears in at least two buffers
+                                        (cdr value) ; appears in at least one modified buffer
+                                        symb))
+                                 symbols))
+                     (filtered (delq nil symb-list)))
+                (cons mode filtered)))
+            table)))
+      ;; merge with previous-data
+      (dolist (mode previous-data)
+        (let ((concatenated (nconc (alist-get (car mode) new-data) (cdr mode))))
+          (delete-dups concatenated)
+          (ignore-errors
+            (setf (nthcdr company-same-mode-buffers-history-store-capacity concatenated) nil))
+          (setf (alist-get (car mode) new-data) concatenated)))
+      new-data)))
 
 (defun company-same-mode-buffers-load-saved-data-v3 (data)
-  ;; alist[mode -> sorted-list[symb]]
+  ;; alist[mode -> sorted-unique-list[symb]]
   (dolist (mode data)
     (let ((tree (company-same-mode-buffers--cache-get-tree (car mode) nil)))
       (dolist (s (cdr mode))
@@ -302,13 +314,6 @@ following the matching strategy defiend in
       (insert-file-contents company-same-mode-buffers-history-file)
       (read (current-buffer)))))
 
-(defun company-same-mode-buffers--parse-history-file-v2 ()
-  (let ((data (company-same-mode-buffers--maybe-read-history-file)))
-    (when data
-      (cl-case (car data)
-        (2 (cdr data))
-        (t (error "unsupported history file version"))))))
-
 (defun company-same-mode-buffers--parse-history-file-v3 ()
   (let ((data (company-same-mode-buffers--maybe-read-history-file)))
     (when data
@@ -321,11 +326,13 @@ following the matching strategy defiend in
   (when company-same-mode-buffers-history-file
     (company-same-mode-buffers-update-cache-other-buffers)
     (company-same-mode-buffers-update-cache (current-buffer))
-    (let ((data (company-same-mode-buffers-make-save-data-v2
-                 (company-same-mode-buffers--parse-history-file-v2)))
+    (let ((data (cons
+                 3
+                 (company-same-mode-buffers-make-save-data-v3
+                  (company-same-mode-buffers--parse-history-file-v3))))
           (enable-local-variables nil))
       (with-temp-buffer
-        (prin1 (cons 2 data) (current-buffer))
+        (prin1 data (current-buffer))
         (write-file company-same-mode-buffers-history-file)))))
 
 (defun company-same-mode-buffers-load-history ()
