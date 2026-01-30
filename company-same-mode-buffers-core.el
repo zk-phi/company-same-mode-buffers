@@ -286,30 +286,34 @@ following the matching strategy defiend in
              nil
              tree)))))))
 
-(defun company-same-mode-buffers-save-history ()
-  (when company-same-mode-buffers-history-file
-    (company-same-mode-buffers-update-cache-other-buffers)
-    (company-same-mode-buffers-update-cache (current-buffer))
-    (let ((data (company-same-mode-buffers-make-save-data-v2
-                 (cdr (company-same-mode-buffers-maybe-parse-history-file))))
-          (enable-local-variables nil))
-      (with-temp-buffer
-        (prin1 (cons 2 data) (current-buffer))
-        (write-file company-same-mode-buffers-history-file)))))
-
-(defun company-same-mode-buffers-maybe-parse-history-file ()
+(defun company-same-mode-buffers--maybe-read-history-file ()
   (when (and company-same-mode-buffers-history-file
              (file-exists-p company-same-mode-buffers-history-file))
     (with-temp-buffer
       (insert-file-contents company-same-mode-buffers-history-file)
       (read (current-buffer)))))
 
-(defun company-same-mode-buffers-load-history ()
-  (let ((data (company-same-mode-buffers-maybe-parse-history-file)))
+(defun company-same-mode-buffers--parse-history-file-v2 ()
+  (let ((data (company-same-mode-buffers--maybe-read-history-file)))
     (when data
       (cl-case (car data)
-        (2 (company-same-mode-buffers-load-saved-data-v2 (cdr data)))
-        (t (error "unknown history file version"))))))
+        (2 (cdr data))
+        (t (error "unsupported history file version"))))))
+
+(defun company-same-mode-buffers-save-history ()
+  (when company-same-mode-buffers-history-file
+    (company-same-mode-buffers-update-cache-other-buffers)
+    (company-same-mode-buffers-update-cache (current-buffer))
+    (let ((data (company-same-mode-buffers-make-save-data-v2
+                 (company-same-mode-buffers--parse-history-file-v2)))
+          (enable-local-variables nil))
+      (with-temp-buffer
+        (prin1 (cons 2 data) (current-buffer))
+        (write-file company-same-mode-buffers-history-file)))))
+
+(defun company-same-mode-buffers-load-history ()
+  (company-same-mode-buffers-load-saved-data-v2
+   (company-same-mode-buffers--parse-history-file-v2)))
 
 (defun company-same-mode-buffers-initialize ()
   "Load saved history file, and prepare hooks to update the history."
