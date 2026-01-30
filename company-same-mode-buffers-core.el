@@ -40,7 +40,7 @@ when `company-same-mode-buffers-case-fold' is non-nil."
   :group 'company-same-mode-buffers
   :type 'string)
 
-(defcustom company-same-mode-buffers-history-store-capacity 10000
+(defcustom company-same-mode-buffers-history-store-capacity 5000
   "How many symbols should be stored in the history file for each major modes."
   :group 'company-same-mode-buffers
   :type 'number)
