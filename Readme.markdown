@@ -111,10 +111,10 @@ To save memory, symbols that appear in only one file (like local variables), and
 
 ### Loading history file
 
-All symbols in unexpired history entries are also added to the per-file cache, as an unmodified file with no name (`nil`).
+All symbols in the history file are also added to the per-file cache, as "an unmodified file with no name (`nil`)".
 
-As a result, symbols from the previous sessions are re-prepended when
+As a result, symbols from the previous sessions are re-prepended to the history when
 
-1. the symbol appears in at least one user-modified, non-temporary buffers
+1. the symbol appears in at least one user-modified files
 
 Other symbols from the previous sessions are kept at the same position in the sorted-list.
