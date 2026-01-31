@@ -53,9 +53,10 @@ when `company-same-mode-buffers-case-fold' is non-nil."
 ;; ---- utils
 
 (defun complete-same-mode-buffers--maphash (fn table)
-  (let (res)
-    (maphash (lambda (k v) (push (funcall fn k v) res)) table)
-    res))
+  (when table
+    (let (res)
+      (maphash (lambda (k v) (push (funcall fn k v) res)) table)
+      res)))
 
 ;; ---- matchers
 
