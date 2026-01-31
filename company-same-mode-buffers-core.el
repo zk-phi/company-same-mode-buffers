@@ -224,14 +224,15 @@ before CURSOR is skipped."
 
 (defun company-same-mode-buffers-all-completions (query)
   "Collect candidates matching QUERY from the current buffer and the cache."
-  (apply 'nconc
-         (company-same-mode-buffers-search-current-buffer
-          (company-same-mode-buffers-query-to-regex query)
-          (point))
-         (complete-same-mode-buffers--maphash
-          (lambda (file entry)          ; entry is a (modified-p . tree[symb])
-            (company-same-mode-buffers-tree-search (cdr entry) query))
-          (gethash major-mode company-same-mode-buffers--cache))))
+  (let ((all-candidates
+         (apply 'nconc
+                (company-same-mode-buffers-search-current-buffer
+                 (company-same-mode-buffers-query-to-regex query) (point))
+                (complete-same-mode-buffers--maphash
+                 (lambda (file entry)       ; entry is a (modified-p . tree[symb])
+                   (company-same-mode-buffers-tree-search (cdr entry) query))
+                 (gethash major-mode company-same-mode-buffers--cache)))))
+    (delete-dups (sort all-candidates 'string<))))
 
 (defun company-same-mode-buffers-fuzzy-all-completions (prefix)
   "Collect candidates from the current buffer and the cache,
